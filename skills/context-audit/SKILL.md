@@ -12,10 +12,12 @@ skills sharing a name (one of them is unreachable).
 ## Run it
 
 ```bash
-node scripts/context-audit.mjs                 # human report
-node scripts/context-audit.mjs --json          # machine-readable
-node scripts/context-audit.mjs --strict        # exit 1 when over budget or names collide
-node scripts/context-audit.mjs --budget 8000   # resident-token budget
+context-audit                 # human report
+context-audit --json          # machine-readable
+context-audit --strict        # exit 1 when over budget or names collide
+context-audit --budget 8000   # resident-token budget
+
+Not on PATH yet? Run `node scripts/context-audit.mjs` from the profile repo.
 ```
 
 ## What the numbers mean

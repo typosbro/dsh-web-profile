@@ -76,6 +76,16 @@ for root in roots:
             path.write_text(text2)
 PY
 
+say "commands"
+BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
+mkdir -p "$BIN_DIR"
+for pair in "repo-map:scripts/repo-map.mjs" "context-audit:scripts/context-audit.mjs" "wt:scripts/wt.sh"; do
+  name="${pair%%:*}"; target="$REPO_DIR/${pair#*:}"
+  chmod +x "$target"
+  ln -sf "$target" "$BIN_DIR/$name"
+  printf '  %s -> %s\n' "$BIN_DIR/$name" "$target"
+done
+
 say "dependencies"
 ( cd "$PROFILE_DIR" && pnpm install --frozen-lockfile --reporter=append-only )
 

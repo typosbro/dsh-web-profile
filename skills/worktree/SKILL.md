@@ -12,11 +12,13 @@ stays untouched.
 ## Commands
 
 ```bash
-scripts/wt.sh new fix-auth            # ../<repo>.wt/fix-auth on branch fix-auth
-scripts/wt.sh new fix-auth main       # from a specific base
-scripts/wt.sh list
-scripts/wt.sh finish fix-auth         # run the repo gate inside the worktree, print merge cmd
-scripts/wt.sh rm fix-auth             # remove the directory, keep the branch
+wt new fix-auth            # ../<repo>.wt/fix-auth on branch fix-auth
+wt new fix-auth main       # from a specific base
+wt list
+wt finish fix-auth         # run the repo gate inside the worktree, print merge cmd
+wt rm fix-auth             # remove the directory, keep the branch
+
+Not on PATH yet? Run `scripts/wt.sh` from the profile repo.
 ```
 
 Worktrees live beside the repo, at `../<repo>.wt/<branch>`, with `/` in branch names flattened

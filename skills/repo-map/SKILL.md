@@ -12,9 +12,12 @@ dependencies.
 ## Run it
 
 ```bash
-node scripts/repo-map.mjs                 # cwd, 4000-token budget
-node scripts/repo-map.mjs --budget 8000   # bigger first look
-node scripts/repo-map.mjs --json          # machine-readable
+repo-map                 # cwd, 4000-token budget
+repo-map --budget 8000   # bigger first look
+repo-map --json          # machine-readable
+
+Not on PATH yet? Run `node scripts/repo-map.mjs` from the profile repo, or add its
+`scripts/` directory to PATH.
 ```
 
 ## Read it
