@@ -99,5 +99,6 @@ MIT. The Playwright MCP server it pins is Apache-2.0; DeepSeek Harness is MIT.
 - [docs/models.md](docs/models.md) — native, OpenAI-compatible, and subscription routes.
 - [docs/replication.md](docs/replication.md) — what is guaranteed, what is not, upgrade path.
 - [docs/improvements.md](docs/improvements.md) — shipped ideas, blocked plugins, next steps.
+- [docs/upgrading.md](docs/upgrading.md) — moving to 0.2.1-rc.2 and unlocking the plugin ecosystem.
 - [docs/ideas-from-other-harnesses.md](docs/ideas-from-other-harnesses.md) — the survey that
   started this.
