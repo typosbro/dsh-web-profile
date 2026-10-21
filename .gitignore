@@ -6,3 +6,5 @@ node_modules/
 profiles/*/node_modules/
 profiles/*/pnpm-lock.yaml.bak*
 plugins/*/node_modules/
+
+bench/results/

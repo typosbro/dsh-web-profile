@@ -38,6 +38,26 @@ Verify any install with `./doctor.sh`.
 | Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `hooks/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 
+## Toolbox
+
+Dependency-free scripts, plus skills that teach the agent when to run them:
+
+- `scripts/repo-map.mjs` — ranked, token-budgeted map of a repository. A directory tree says
+  what exists; this says what matters.
+- `scripts/context-audit.mjs` — separates resident context cost (AGENTS.md plus skill
+  descriptions) from on-demand skill bodies, finds rules written three times, and catches
+  skill-name collisions.
+- `scripts/wt.sh` — one git worktree per task, beside the repo, with the gate run on finish.
+- `hooks/stop-gate.sh` — runs the repository's gate, then a diff-level review stage
+  (`examples/agent-review.sh`) that blocks on leaked keys, conflict markers, and `debugger`
+  statements.
+- `bench/run.mjs` — runs one task on two model routes and keeps both transcripts, exits, and
+  durations. Harness changes get measured, not argued.
+
+The matching skills live in `skills/` (`repo-map`, `context-audit`, `worktree`); copy or symlink
+the directories into your skill root. See [docs/improvements.md](docs/improvements.md) for what
+else is worth doing and what is blocked on the harness version.
+
 ## Why a profile at all
 
 DSH composes a profile as layered patches: bundle layers first, then
@@ -72,3 +92,12 @@ See [docs/replication.md](docs/replication.md) for the exact guarantees and the 
 ## License
 
 MIT. The Playwright MCP server it pins is Apache-2.0; DeepSeek Harness is MIT.
+
+## Documentation
+
+- [docs/why-these-rows.md](docs/why-these-rows.md) — the decision log for every patch row.
+- [docs/models.md](docs/models.md) — native, OpenAI-compatible, and subscription routes.
+- [docs/replication.md](docs/replication.md) — what is guaranteed, what is not, upgrade path.
+- [docs/improvements.md](docs/improvements.md) — shipped ideas, blocked plugins, next steps.
+- [docs/ideas-from-other-harnesses.md](docs/ideas-from-other-harnesses.md) — the survey that
+  started this.
