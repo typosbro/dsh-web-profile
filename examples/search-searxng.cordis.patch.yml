@@ -1,0 +1,17 @@
+# Free web search through a local SearXNG instance.
+#
+# 1) Install the bundle in the profile:
+#      cd ~/.dsh/profiles/web && pnpm add dsh-web-search-searxng
+# 2) Add it to dsh.profile.bundles in profiles/web/package.json.
+# 3) Restart `dsh web` (a new bundle row cannot serve a process that booted before it).
+#
+# Why: the shipped DeepSeek search bills a whole model turn per search and fails
+# with HTTP 402 once the balance is empty. A local SearXNG is free and keeps the
+# tool's result shape.
+#
+# A patch replaces the targeted row's whole config, so restate `fetchProvider`.
+
+- id: web
+  config:
+    searchProvider: searxng
+    fetchProvider: http

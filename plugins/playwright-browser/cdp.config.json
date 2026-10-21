@@ -1,0 +1,19 @@
+{
+  "$comment": [
+    "Strategy A: Playwright keeps launching/owning Chrome (persistent profile, channel chrome),",
+    "and Playwright's chromium launcher appends --remote-debugging-pipe as it always does.",
+    "These extra launch args add a TCP CDP endpoint on the SAME Chrome process so a second",
+    "DevTools-protocol client (the DSH browser pane) can attach without disturbing Playwright.",
+    "--remote-allow-origins=* is required for WebSocket CDP clients that send an Origin header",
+    "(Chrome 111+ rejects those by default).",
+    "Merged by @playwright/mcp via mergeConfig(): config-file launchOptions survive CLI options."
+  ],
+  "browser": {
+    "launchOptions": {
+      "args": [
+        "--remote-debugging-port=9222",
+        "--remote-allow-origins=*"
+      ]
+    }
+  }
+}

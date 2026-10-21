@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Live browser">
+  <rect x="2" y="3.5" width="20" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+  <line x1="2" y1="8" x2="22" y2="8" stroke="currentColor" stroke-width="1.6"/>
+  <circle cx="5" cy="5.75" r="0.9" fill="currentColor"/>
+  <circle cx="7.8" cy="5.75" r="0.9" fill="currentColor"/>
+  <path d="M10.2 11.2 L15.4 14.6 L10.2 18 Z" fill="currentColor"/>
+  <line x1="9" y1="21" x2="15" y2="21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

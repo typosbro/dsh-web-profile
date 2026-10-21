@@ -1,0 +1,42 @@
+# Browser stack for DSH: a pinned Playwright MCP server, headless Chrome, and the
+# CDP side-channel the browser pane attaches to.
+#
+# The @TOKEN@ placeholders below are rewritten by bootstrap.sh against the machine
+# that installs this profile (node location, plugin dir, cache dir). They are not
+# meant to stay literal.
+- insert:
+    - id: playwright-browser
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: browser
+        transport: stdio
+        command: '@NODE_BIN@'
+        args:
+          - '@PLUGIN_DIR@/playwright-browser/run-playwright-mcp.mjs'
+          - --headless
+          - --browser
+          - chrome
+          - --user-data-dir
+          - '@CACHE_DIR@/dsh-browser-profile'
+          - --output-dir
+          - '@CACHE_DIR@/dsh-browser-out'
+          - --viewport-size
+          - 390x844
+          - --image-responses
+          - allow
+          - --timeout-action
+          - '15000'
+          - --timeout-navigation
+          - '120000'
+          - --timeout-settle
+          - '1000'
+          # Playwright keeps launching and owning Chrome, and Chrome is asked to
+          # ALSO open a TCP CDP port on the same process so a second
+          # DevTools-protocol client (the browser pane) can attach. Chrome honours
+          # both the pipe Playwright appends and this port at once.
+          - --config
+          - '@PLUGIN_DIR@/playwright-browser/cdp.config.json'
+        env: {}
+        cwd: '@CACHE_DIR@/dsh-browser-out'
+        toolCallTimeoutMs: 180000
+        failOnStartupError: true

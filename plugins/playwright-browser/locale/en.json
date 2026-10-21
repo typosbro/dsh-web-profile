@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Playwright Browser",
+    "description": "Drives a real headless Chrome through the pinned Playwright MCP server: navigate, click, type, read console and network, take screenshots, with a persistent browser profile."
+  }
+}

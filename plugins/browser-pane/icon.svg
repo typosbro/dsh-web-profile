@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Browser pane">
+  <title>Browser pane</title>
+  <!-- A HTTP(S) page in the left half of a window, and a docked right pane the
+       viewer can take over: a pointer sits inside the pane. Original artwork
+       drawn for this bundle. -->
+  <g fill="none" stroke="#2f6fed" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4.6" y="11.6" width="54.8" height="40.8" rx="7"/>
+    <path d="M4.6 21.4h54.8"/>
+    <path d="M41.6 21.4v31"/>
+  </g>
+  <rect x="43.4" y="23.4" width="14.2" height="27.2" rx="4" fill="#2f6fed" opacity="0.14"/>
+  <g fill="none" stroke="#2f6fed" stroke-width="2.8" stroke-linecap="round">
+    <circle cx="20.2" cy="36.8" r="9.2"/>
+    <path d="M11.4 36.8h17.6"/>
+    <path d="M20.2 27.6c3.2 3.5 3.2 14.9 0 18.4-3.2-3.5-3.2-14.9 0-18.4z" stroke-linejoin="round"/>
+  </g>
+  <path d="M46.2 29.2 57.6 40.6 51.6 41.7 48.8 47.6Z" fill="#2f6fed" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round"/>
+</svg>

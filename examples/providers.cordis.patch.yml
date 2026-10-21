@@ -1,0 +1,47 @@
+# Add an OpenAI-compatible provider (or several), then make one the default.
+#
+# Append this block to profiles/web/cordis.patch.yml, or pass it as an overlay:
+#   dsh web --patch ./examples/providers.cordis.patch.yml
+#
+# A patch REPLACES the targeted row's whole config: if the profile already has an
+# `llm-pi-ai` entry, merge the providers into that entry instead of adding this
+# second one, or the later entry wins and the earlier providers disappear.
+
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      example:
+        apiKeyEnv: EXAMPLE_API_KEY
+        api: openai-completions
+        baseURL: https://api.example.com/v1
+        defaultContextWindow: 200000
+        defaultMaxTokens: 32768
+        models:
+          - id: example-chat
+            name: Example Chat
+            contextWindow: 200000
+            input:
+              - text
+              - image
+            # `false` declares a model with no thinking levels, so no reasoning
+            # field is ever sent. Omit the key to keep the catalog's capability.
+            reasoningEfforts: false
+          - id: example-reasoner
+            name: Example Reasoner
+            contextWindow: 200000
+            input:
+              - text
+            reasoningEfforts:
+              off: null
+              low: low
+              high: high
+              max: max
+
+# Optional: pin the default model. Without this row the shipped default applies.
+# - id: agent-default-model
+#   name: "@deepseek-ai/dsh-agent-default-model"
+#   config:
+#     provider: example
+#     model: example-chat
+#     reasoningEffort: high

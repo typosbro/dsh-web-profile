@@ -1,0 +1,20 @@
+# Configuration-only bundle: switch on the shipped right-Sidebar Browser.
+#
+# WHY THIS EXISTS. `@deepseek-ai/dsh-web-app` inserts the Browser row already
+# disabled for every profile that is not `desktop`:
+#
+#     - id: ui-sidebar-browser
+#       name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
+#       disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"
+#
+# A non-insert patch replaces the supplied fields of the row with that id, and
+# `name` is an assertion of the existing plugin name rather than a rename, so
+# restating it here documents and pins the target while `disabled: false`
+# replaces the desktop-only condition outright.
+#
+# This layer is applied after every bundle layer (an installed bundle joins
+# `dsh.profile.bundles` at the end of the list), so it wins over the shipped
+# expression. `config` stays absent: the package takes no plugin configuration.
+- id: ui-sidebar-browser
+  name: '@deepseek-ai/dsh-client-ui-sidebar-browser'
+  disabled: false

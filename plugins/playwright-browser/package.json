@@ -1,0 +1,26 @@
+{
+  "name": "@local/playwright-browser",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless Chrome browser control for DSH agents through the pinned Playwright MCP server.",
+  "type": "module",
+  "exports": {
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "cdp.config.json",
+    "run-playwright-mcp.mjs",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dependencies": {
+    "@playwright/mcp": "0.0.83"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

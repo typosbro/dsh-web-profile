@@ -1,0 +1,4 @@
+# Mount the browser-live plugin row: host routes + Web client sidebar pane.
+- insert:
+    - id: browser-live
+      name: '@local/browser-live'

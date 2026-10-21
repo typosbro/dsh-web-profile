@@ -1,0 +1,72 @@
+# dsh-web-profile — patch layer for the `web` profile.
+#
+# Applied after every bundle layer. Every row here exists for a reason; see
+# docs/why-these-rows.md before deleting one.
+
+# Loopback-only GUI: skip the per-process launch token when the page is opened
+# at 127.0.0.1, while the Host/Origin fence keeps protecting every other
+# authority. Without this, every reload of the local GUI needs the tokenised URL.
+- insert:
+    - id: local-no-browser-auth
+      name: ./no-browser-auth.mjs
+
+# Phone-first shell: the sidebar becomes an overlay drawer, the settings nav
+# stacks, the shell pins to the dynamic viewport (composer clears mobile browser
+# chrome), safe-area insets apply, and pull-to-refresh is off.
+- insert:
+    - id: mobile-shell
+      name: ./mobile-shell/index.mjs
+
+# Installable PWA: a real manifest with 192/512/maskable icons, so Chrome offers
+# a WebAPK install instead of a bookmark. No service worker on purpose: the app
+# is a live websocket client and a cache would risk serving a stale shell.
+- insert:
+    - id: web-pwa
+      name: ./web-pwa/host.mjs
+
+# The DeepSeek package inventory plugin is a marketplace surface, not a runtime
+# dependency; it adds network calls at boot on a box that does not use it.
+- id: plugin-package-inventory-deepseek
+  disabled: true
+
+# Permission presets. The public default is workspace-write: a fresh clone can
+# edit its workspace but not the rest of the machine. The author's own box runs
+# danger-full-access; flip defaultPreset here if you want that, and understand
+# that `approval: never` removes the last prompt before destructive commands.
+- id: permission
+  name: "@deepseek-ai/dsh-permission-presets"
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+    defaultPreset: workspace-write
+
+- id: ui-settings-general
+  name: "@deepseek-ai/dsh-client-ui-settings-general"
+  config:
+    welcomeNoticeVersion: 2026-09-28.1
+
+- id: ui-theme
+  name: "@deepseek-ai/dsh-client-ui-theme"
+  config:
+    fontSize: 17
+
+# Claude Code hook bridge. Runs hooks.json at the same interception points
+# Claude Code uses, so a repository's own gate can block the end of a turn
+# instead of relying on the model remembering to run it. The dispatcher is
+# opt-in per repository: it does nothing unless the repo exposes
+# scripts/agent-gate.sh or a package.json "gate"/"gate:fast" script, skips a
+# clean git tree, and stands down after two blocks so a pre-existing breakage
+# cannot trap a turn.
+- insert:
+    - id: hooks-claude-code
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        configPath: !!js dshHomePath('hooks/hooks.json')

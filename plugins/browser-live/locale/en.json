@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Live browser",
+    "description": "Live view of the agent's headless Chrome, with click and type forwarding."
+  }
+}

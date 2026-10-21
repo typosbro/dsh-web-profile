@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Browser Pane",
+    "description": "Turns on the right-sidebar Browser tabs, which show HTTP(S) pages — including loopback apps such as http://127.0.0.1:5174 — beside the conversation."
+  }
+}
