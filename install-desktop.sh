@@ -3,24 +3,40 @@
 #
 # The Desktop app owns ~/.dsh/profiles/desktop and the CLI refuses that profile by
 # name, so this script does not use `dsh`: it copies the same plugin directories the
-# `web` profile uses and merges the same three rows into the app's patch layer inside
-# a marked block. Re-running replaces the block; --uninstall removes it cleanly.
+# `web` profile uses and merges the same rows into the app's patch layer inside a
+# marked block. Re-running replaces the block; --uninstall removes it cleanly.
 #
-#   ./install-desktop.sh              install or refresh
-#   ./install-desktop.sh --uninstall  remove the block and the copied directories
+#   ./install-desktop.sh                     install or refresh
+#   ./install-desktop.sh --remote-host HOST  also allow token-free access from HOST
+#                                            (e.g. a tailnet name), so a phone can
+#                                            keep a durable URL instead of a
+#                                            per-process ?token= link
+#   ./install-desktop.sh --uninstall         remove the block and directories
 #
 # Works on macOS only, because that is where the Desktop app runs. On Linux use
-# ./bootstrap.sh, which installs the `web` profile from the same files.
+# ./bootstrap.sh plus `dsh web --trusted-host HOST`.
 set -euo pipefail
 
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
 PROFILE_DIR="$DSH_HOME/profiles/desktop"
 APP="${APP:-/Applications/DeepSeek Harness.app}"
-MODE="${1:-install}"
 MARK_BEGIN="# >>> dsh-web-profile >>>"
 MARK_END="# <<< dsh-web-profile <<<"
-PLUGIN_DIRS=(mobile-shell web-pwa gate)
+PLUGIN_DIRS=(mobile-shell web-pwa gate remote-auth session-message)
+
+MODE="install"
+REMOTE_HOST=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --uninstall) MODE="uninstall" ;;
+    --remote-host) REMOTE_HOST="${2:-}"; shift ;;
+    --remote-host=*) REMOTE_HOST="${1#*=}" ;;
+    -h|--help) sed -n '2,17p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) printf 'error: unknown argument: %s\n' "$1" >&2; exit 1 ;;
+  esac
+  shift
+done
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -30,7 +46,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 [ -d "$PROFILE_DIR" ] || die "no desktop profile at $PROFILE_DIR — open the Desktop app once, then re-run"
 command -v python3 >/dev/null || die "python3 is required for the patch merge"
 
-if [ "$MODE" = "--uninstall" ]; then
+if [ "$MODE" = "uninstall" ]; then
   say "uninstall"
   python3 - "$PROFILE_DIR/cordis.patch.yml" "$MARK_BEGIN" "$MARK_END" <<'PY'
 import sys, pathlib, re
@@ -69,9 +85,9 @@ BACKUP="$PROFILE_DIR/cordis.patch.yml.bak.$(date +%Y%m%d-%H%M%S)"
 cp "$PROFILE_DIR/cordis.patch.yml" "$BACKUP"
 printf '  backup: %s\n' "$BACKUP"
 
-python3 - "$PROFILE_DIR/cordis.patch.yml" "$MARK_BEGIN" "$MARK_END" <<'PY'
+python3 - "$PROFILE_DIR/cordis.patch.yml" "$MARK_BEGIN" "$MARK_END" "$REMOTE_HOST" <<'PY'
 import sys, pathlib, re
-path, begin, end = sys.argv[1:4]
+path, begin, end, remote_host = sys.argv[1:5]
 p = pathlib.Path(path)
 text = p.read_text()
 
@@ -84,7 +100,7 @@ text = pattern.sub("\n", text).rstrip("\n")
 if text.strip() in ("", "[]"):
     text = ""
 
-block = """{begin}
+block = begin + """
 # Managed by dsh-web-profile/install-desktop.sh — edits inside this block are
 # replaced on the next run. Remove it with `./install-desktop.sh --uninstall`.
 - insert:
@@ -96,11 +112,24 @@ block = """{begin}
 - insert:
     - id: stop-gate
       name: ./gate/index.mjs
-{end}
-""".format(begin=begin, end=end)
-
+- insert:
+    - id: session-message
+      name: ./session-message/index.mjs
+"""
+rows = 4
+if remote_host:
+    block += """- insert:
+    - id: remote-auth
+      name: ./remote-auth/index.mjs
+- id: connection
+  name: '@deepseek-ai/dsh-client-connection'
+  config:
+    trustedHosts: !!js "[...(ctx.webStartup?.trustedHosts ?? []), '%s']"
+""" % remote_host
+    rows += 2
+block += end + "\n"
 p.write_text((text + ("\n" if text else "") + block))
-print("  merged 3 rows (mobile-shell, web-pwa, stop-gate)")
+print("  merged %d rows%s" % (rows, (" (incl. --remote-host %s)" % remote_host) if remote_host else ""))
 PY
 
 say "done"
@@ -110,6 +139,19 @@ The rows are in place. Now quit and reopen the Desktop app.
 Verify after reopening: the GUI should be phone-friendly below ~980px wide, serve
 /dsh-pwa/manifest.webmanifest, and run a repository gate before ending a turn in a
 repo that exposes scripts/agent-gate.sh or a package.json "gate" script.
-
-Remove everything with: ./install-desktop.sh --uninstall
 EOF
+if [ -n "$REMOTE_HOST" ]; then
+  cat <<EOF
+
+Remote access enabled for: $REMOTE_HOST
+Expose the loopback port to your tailnet:
+
+  tailscale serve --bg 57985
+  tailscale serve status
+
+Then open https://$REMOTE_HOST/ from the phone. Anything on the tailnet that can
+reach that name can also reach this GUI, which can run commands — restrict it with
+Tailscale ACLs if the tailnet has other users.
+EOF
+fi
+printf '\nRemove everything with: ./install-desktop.sh --uninstall\n'

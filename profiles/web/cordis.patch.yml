@@ -3,12 +3,15 @@
 # Applied after every bundle layer. Every row here exists for a reason; see
 # docs/why-these-rows.md before deleting one.
 
-# Loopback-only GUI: skip the per-process launch token when the page is opened
-# at 127.0.0.1, while the Host/Origin fence keeps protecting every other
-# authority. Without this, every reload of the local GUI needs the tokenised URL.
+# Token-free access for the authorities this deployment declares trusted.
+# Exempts loopback plus every `trustedHosts` entry, so a phone on the tailnet can
+# keep a durable URL (and QR code) instead of a per-process ?token= link. The
+# Host/Origin fence is untouched: an authority that was never declared trusted is
+# still refused before authentication is consulted. Replaces the earlier
+# no-browser-auth.mjs, which hardcoded one author's public hostname.
 - insert:
-    - id: local-no-browser-auth
-      name: ./no-browser-auth.mjs
+    - id: remote-auth
+      name: ./remote-auth/index.mjs
 
 # Phone-first shell: the sidebar becomes an overlay drawer, the settings nav
 # stacks, the shell pins to the dynamic viewport (composer clears mobile browser
@@ -68,3 +71,11 @@
 - insert:
     - id: stop-gate
       name: ./gate/index.mjs
+
+# Cross-session messaging: dsh has no way for one session to address another
+# (send_message reaches only the caller's own subagents, and the official
+# experimental agent-team bundle is roster-bound to one shared checkout). This row
+# registers one tool that addresses any live session by id or working directory.
+- insert:
+    - id: session-message
+      name: ./session-message/index.mjs

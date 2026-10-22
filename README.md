@@ -48,11 +48,12 @@ Verify any install with `./doctor.sh`.
 
 | Layer | What it does | Where |
 |---|---|---|
-| Loopback auth skip | local GUI opens without the per-process token; Host/Origin fence stays | `profiles/web/no-browser-auth.mjs` |
+| Trusted-host auth skip | loopback and declared `trustedHosts` open without the per-process token; Host/Origin fence stays | `profiles/web/remote-auth/` |
 | Phone shell | sidebar as overlay drawer, stacked settings nav, dynamic viewport, safe-area insets | `profiles/web/mobile-shell/` |
 | PWA | real manifest and icons so Chrome offers an install; no service worker | `profiles/web/web-pwa/` |
 | Browser stack | pinned `@playwright/mcp` 0.0.83, headless Chrome, CDP side-channel for the pane | `plugins/playwright-browser/`, `plugins/browser-pane/`, `plugins/browser-live/` |
 | Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `profiles/web/gate/` |
+| Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 
 ## Toolbox
