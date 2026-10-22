@@ -58,15 +58,13 @@
   config:
     fontSize: 17
 
-# Claude Code hook bridge. Runs hooks.json at the same interception points
-# Claude Code uses, so a repository's own gate can block the end of a turn
-# instead of relying on the model remembering to run it. The dispatcher is
-# opt-in per repository: it does nothing unless the repo exposes
-# scripts/agent-gate.sh or a package.json "gate"/"gate:fast" script, skips a
-# clean git tree, and stands down after two blocks so a pre-existing breakage
-# cannot trap a turn.
+# Repository stop gate (portable). The native `agent/turn-stopping` event is
+# dispatched serially before a turn boundary commits, and the loop re-reads its
+# inbox afterwards, so a listener that steers a message forces another step.
+# This replaces the earlier '@deepseek-ai/dsh-hooks-claude-code' row: that package
+# is not shipped by the dsh Desktop app and peer-depends on the whole 0.2.1 stack,
+# so it could not mount on macOS. gate/index.mjs has no external dependency and
+# behaves identically on the CLI and the app.
 - insert:
-    - id: hooks-claude-code
-      name: '@deepseek-ai/dsh-hooks-claude-code'
-      config:
-        configPath: !!js dshHomePath('hooks/hooks.json')
+    - id: stop-gate
+      name: ./gate/index.mjs

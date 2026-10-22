@@ -22,8 +22,7 @@ command -v node >/dev/null 2>&1 && ok "node $(node -v)" || bad "node missing"
 command -v pnpm >/dev/null 2>&1 && ok "pnpm $(pnpm -v)" || warn "pnpm missing (needed only to reinstall)"
 
 [ -f "$PROFILE_DIR/cordis.patch.yml" ] && ok "patch layer present" || bad "cordis.patch.yml missing"
-[ -f "$DSH_HOME/hooks/stop-gate.sh" ] && [ -x "$DSH_HOME/hooks/stop-gate.sh" ] \
-  && ok "stop-gate hook executable" || warn "stop-gate hook missing or not executable"
+[ -f "$PROFILE_DIR/gate/index.mjs" ] && ok "stop-gate plugin present" || warn "stop-gate plugin missing"
 grep -q "@DSH_HOME@" "$PROFILE_DIR/cordis.patch.yml" 2>/dev/null \
   && bad "unsubstituted @DSH_HOME@ token in the installed patch" \
   || ok "paths substituted"
@@ -36,7 +35,7 @@ fi
 
 if ( cd "$PROFILE_DIR" && timeout 120 dsh --profile "$PROFILE_NAME" --dump-config >/tmp/dsh-doctor-dump.$$ 2>/tmp/dsh-doctor-err.$$ ); then
   ok "profile composes ($(wc -l </tmp/dsh-doctor-dump.$$) lines)"
-  for row in local-no-browser-auth mobile-shell web-pwa hooks-claude-code; do
+  for row in mobile-shell web-pwa stop-gate; do
     grep -q "$row" "/tmp/dsh-doctor-dump.$$" && ok "row: $row" || warn "row missing: $row"
   done
 else

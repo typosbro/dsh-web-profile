@@ -17,6 +17,23 @@ cd dsh-web-profile
 dsh web                 # http://127.0.0.1:3080/
 ```
 
+## Two hosts, one patch layer
+
+The same plugin files run under either host:
+
+- **Linux / CLI** — `./bootstrap.sh` installs the `web` profile, then `dsh web`.
+- **macOS / Desktop app** — `./install-desktop.sh` copies the same `mobile-shell/`,
+  `web-pwa/` and `gate/` directories into `~/.dsh/profiles/desktop` and merges the
+  same three rows into the app-managed patch layer inside a marked block
+  (`--uninstall` removes them). Quit and reopen the app to apply.
+
+The stop gate is a plain host plugin (`gate/index.mjs`) that listens to
+`agent/turn-stopping`, runs the repository's gate, and steers a message back when it
+fails. It deliberately replaces the earlier `@deepseek-ai/dsh-hooks-claude-code` row:
+that package is not shipped by the Desktop app and peer-depends on the whole 0.2.1
+stack, so a machine without the dsh CLI could never mount it. `hooks/` is kept for
+CLI setups that already install the Claude Code bridge.
+
 Requirements: Linux or macOS, Node 22+, pnpm (`corepack enable`), `rsync`, `python3`, and a
 system Chrome/Chromium for the browser tools.
 
@@ -35,7 +52,7 @@ Verify any install with `./doctor.sh`.
 | Phone shell | sidebar as overlay drawer, stacked settings nav, dynamic viewport, safe-area insets | `profiles/web/mobile-shell/` |
 | PWA | real manifest and icons so Chrome offers an install; no service worker | `profiles/web/web-pwa/` |
 | Browser stack | pinned `@playwright/mcp` 0.0.83, headless Chrome, CDP side-channel for the pane | `plugins/playwright-browser/`, `plugins/browser-pane/`, `plugins/browser-live/` |
-| Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `hooks/` |
+| Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `profiles/web/gate/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 
 ## Toolbox
