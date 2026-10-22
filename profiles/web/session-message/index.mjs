@@ -21,8 +21,13 @@
  */
 export const name = 'session-message'
 
-/** The registry of live agents is the whole mechanism. */
-export const inject = ['agents', 'workingDirectory']
+/**
+ * `tools` is required to register the tool at all: cordis resolves `ctx.<name>`
+ * only for declared injects, so omitting it fails the fiber at mount (observed as
+ * fiberPhase "failed" with the tool silently absent). `agents` supplies the live
+ * registry and `workingDirectory` resolves a session's directory from its agent.
+ */
+export const inject = ['tools', 'agents', 'workingDirectory']
 
 /** Tool name as the model sees it. */
 const TOOL_NAME = 'talk_to_session'
