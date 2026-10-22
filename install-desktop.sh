@@ -118,14 +118,19 @@ block = begin + """
 """
 rows = 4
 if remote_host:
+    # Accept a comma-separated list so one install can trust the MagicDNS name and
+    # the tailnet IP: macOS's open-source tailscaled does not always install
+    # Tailscale's resolver, so the name may not resolve here even though it does
+    # on a phone.
+    hosts = [h.strip() for h in remote_host.split(',') if h.strip()]
     block += """- insert:
     - id: remote-auth
       name: ./remote-auth/index.mjs
 - id: connection
   name: '@deepseek-ai/dsh-client-connection'
   config:
-    trustedHosts: !!js "[...(ctx.webStartup?.trustedHosts ?? []), '%s']"
-""" % remote_host
+    trustedHosts: !!js "[...(ctx.webStartup?.trustedHosts ?? []), %s]"
+""" % ', '.join("'%s'" % h for h in hosts)
     rows += 2
 block += end + "\n"
 p.write_text((text + ("\n" if text else "") + block))
@@ -146,8 +151,12 @@ if [ -n "$REMOTE_HOST" ]; then
 Remote access enabled for: $REMOTE_HOST
 Expose the loopback port to your tailnet:
 
-  tailscale serve --bg 57985
+  tailscale serve --bg --yes --http=8080 57985
   tailscale serve status
+
+Use --http rather than HTTPS: `tailscale serve` over HTTPS blocks until Serve is
+enabled for the whole tailnet in the admin console, while HTTP starts immediately.
+Traffic still rides inside WireGuard, so it is encrypted on the wire.
 
 Then open https://$REMOTE_HOST/ from the phone. Anything on the tailnet that can
 reach that name can also reach this GUI, which can run commands — restrict it with
