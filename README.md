@@ -48,7 +48,7 @@ Verify any install with `./doctor.sh`.
 
 | Layer | What it does | Where |
 |---|---|---|
-| Trusted-host auth skip | loopback and declared `trustedHosts` open without the per-process token; Host/Origin fence stays | `profiles/web/remote-auth/` |
+| Trusted-host auth skip | clean URLs on loopback and declared `trustedHosts` open without the per-process token; a valid `?token=` still mints the Desktop shell's cookie; Host/Origin fence stays | `profiles/web/remote-auth/` |
 | Phone shell | sidebar as overlay drawer, stacked settings nav, dynamic viewport, safe-area insets | `profiles/web/mobile-shell/` |
 | PWA | real manifest and icons so Chrome offers an install; no service worker | `profiles/web/web-pwa/` |
 | Browser stack | pinned `@playwright/mcp` 0.0.83, headless Chrome, CDP side-channel for the pane | `plugins/playwright-browser/`, `plugins/browser-pane/`, `plugins/browser-live/` |
