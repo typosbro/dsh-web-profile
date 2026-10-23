@@ -6,18 +6,22 @@
     "@local/browser-live": "link:../../plugins/browser-live",
     "@local/browser-pane": "link:../../plugins/browser-pane",
     "@local/playwright-browser": "link:../../plugins/playwright-browser",
-    "@playwright/mcp": "0.0.83"
+    "@playwright/mcp": "0.0.83",
+    "@local/dsh-web-search-local": "link:../../plugins/web-search"
   },
   "dsh": {
     "profile": {
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "@deepseek-ai/dsh-subagent-codex",
-        "@local/browser-pane",
-        "@local/playwright-browser",
-        "@local/browser-live"
-      ]
+        "@deepseek-ai/dsh-experimental-voice-input-bundle",
+        "@deepseek-ai/dsh-experimental-agent-team-profile",
+        "@deepseek-ai/dsh-experimental-session-search",
+        "@deepseek-ai/dsh-experimental-session-titles-bundle",
+        "@deepseek-ai/dsh-experimental-tool-worktree",
+        "@local/dsh-web-search-local"
+      ],
+      "patchReload": "live"
     }
   }
 }

@@ -17,6 +17,9 @@ importers:
       '@local/browser-pane':
         specifier: link:../../plugins/browser-pane
         version: link:../../plugins/browser-pane
+      '@local/dsh-web-search-local':
+        specifier: link:../../plugins/web-search
+        version: link:../../plugins/web-search
       '@local/playwright-browser':
         specifier: link:../../plugins/playwright-browser
         version: link:../../plugins/playwright-browser

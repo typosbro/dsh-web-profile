@@ -1,41 +1,36 @@
-# dsh-web-profile — patch layer for the `web` profile.
-#
-# Applied after every bundle layer. Every row here exists for a reason; see
-# docs/why-these-rows.md before deleting one.
+# Your patch layer for this dsh profile, applied after every bundle layer.
+# Rows below come from dsh-web-profile (2026-10-23). mobile-shell and web-pwa
+# were deliberately declined; the earlier local-no-browser-auth row is replaced
+# by remote-auth.
 
-# Token-free access for the authorities this deployment declares trusted.
-# Exempts loopback plus every `trustedHosts` entry, so a phone on the tailnet can
-# keep a durable URL (and QR code) instead of a per-process ?token= link. The
-# Host/Origin fence is untouched: an authority that was never declared trusted is
-# still refused before authentication is consulted. Replaces the earlier
-# no-browser-auth.mjs, which hardcoded one author's public hostname.
+# Token-free access for trusted authorities. Loopback (127.0.0.1) is always
+# exempt, so the local GUI opens on a clean URL; the Host/Origin fence still
+# refuses any authority that was never declared trusted.
 - insert:
     - id: remote-auth
       name: ./remote-auth/index.mjs
 
-# Phone-first shell: the sidebar becomes an overlay drawer, the settings nav
-# stacks, the shell pins to the dynamic viewport (composer clears mobile browser
-# chrome), safe-area insets apply, and pull-to-refresh is off.
+# Repository stop gate: a checkpoint that refuses to end a turn while the
+# repository's own gate fails. Max two blocks, so pre-existing breakage cannot
+# trap a turn.
 - insert:
-    - id: mobile-shell
-      name: ./mobile-shell/index.mjs
+    - id: stop-gate
+      name: ./gate/index.mjs
 
-# Installable PWA: a real manifest with 192/512/maskable icons, so Chrome offers
-# a WebAPK install instead of a bookmark. No service worker on purpose: the app
-# is a live websocket client and a cache would risk serving a stale shell.
+# Cross-session messaging: one session can address any live session by id or
+# working directory.
 - insert:
-    - id: web-pwa
-      name: ./web-pwa/host.mjs
+    - id: session-message
+      name: ./session-message/index.mjs
 
-# The DeepSeek package inventory plugin is a marketplace surface, not a runtime
-# dependency; it adds network calls at boot on a box that does not use it.
+# The DeepSeek package inventory plugin is a marketplace surface and adds network
+# calls at boot on a box that does not use it.
 - id: plugin-package-inventory-deepseek
   disabled: true
 
-# Permission presets. The public default is workspace-write: a fresh clone can
-# edit its workspace but not the rest of the machine. The author's own box runs
-# danger-full-access; flip defaultPreset here if you want that, and understand
-# that `approval: never` removes the last prompt before destructive commands.
+# Permission presets. Owner decision 2026-10-23: danger-full-access is the
+# default (this machine is single-user and the agent edits outside the workspace
+# constantly). Switch presets in the UI; approvals are never asked in this mode.
 - id: permission
   name: "@deepseek-ai/dsh-permission-presets"
   config:
@@ -49,7 +44,7 @@
       danger-full-access:
         sandbox: danger-full-access
         approval: never
-    defaultPreset: workspace-write
+    defaultPreset: danger-full-access
 
 - id: ui-settings-general
   name: "@deepseek-ai/dsh-client-ui-settings-general"
@@ -61,21 +56,10 @@
   config:
     fontSize: 17
 
-# Repository stop gate (portable). The native `agent/turn-stopping` event is
-# dispatched serially before a turn boundary commits, and the loop re-reads its
-# inbox afterwards, so a listener that steers a message forces another step.
-# This replaces the earlier '@deepseek-ai/dsh-hooks-claude-code' row: that package
-# is not shipped by the dsh Desktop app and peer-depends on the whole 0.2.1 stack,
-# so it could not mount on macOS. gate/index.mjs has no external dependency and
-# behaves identically on the CLI and the app.
-- insert:
-    - id: stop-gate
-      name: ./gate/index.mjs
-
-# Cross-session messaging: dsh has no way for one session to address another
-# (send_message reaches only the caller's own subagents, and the official
-# experimental agent-team bundle is roster-bound to one shared checkout). This row
-# registers one tool that addresses any live session by id or working directory.
-- insert:
-    - id: session-message
-      name: ./session-message/index.mjs
+# OpenCode Go provider (pre-existing row, kept).
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      opencode-go:
+        apiKeyEnv: OPENCODE_GO_API_KEY

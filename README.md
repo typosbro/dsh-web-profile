@@ -56,6 +56,30 @@ Verify any install with `./doctor.sh`.
 | Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 
+### Enabled on the author's Mac (2026-10-23)
+
+The profile in this repo mirrors one real machine, so `bootstrap.sh` reproduces it
+exactly. The bundle list is the source of truth:
+
+`dsh-base`, `dsh-web-app`, and the official experimental bundles
+`dsh-experimental-voice-input-bundle`, `dsh-experimental-agent-team-profile`,
+`dsh-experimental-session-search`, `dsh-experimental-session-titles-bundle`,
+`dsh-experimental-tool-worktree`, plus `@local/dsh-web-search-local` from
+`plugins/web-search`.
+
+Declined on this machine and kept in the tree as optional: the **phone shell**
+(`mobile-shell/`), the **PWA** (`web-pwa/`) and the **browser stack**
+(`plugins/playwright-browser`, `browser-pane`, `browser-live`). Their dependencies
+still install; their rows are simply not mounted. Add the rows back to
+`cordis.patch.yml` to enable them.
+
+Permissions default to `danger-full-access` here, by owner decision: this is a
+single-user machine and the agent edits outside the workspace constantly. Clone it
+knowing `approval: never` removes the last prompt before a destructive command.
+
+The experimental bundles ship inside `dsh`, not the profile, so they need no
+version pinning — reproducing them requires only the `bundles` array above.
+
 ## Toolbox
 
 Dependency-free scripts, plus skills that teach the agent when to run them:

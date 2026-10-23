@@ -35,7 +35,7 @@ fi
 
 if ( cd "$PROFILE_DIR" && timeout 120 dsh --profile "$PROFILE_NAME" --dump-config >/tmp/dsh-doctor-dump.$$ 2>/tmp/dsh-doctor-err.$$ ); then
   ok "profile composes ($(wc -l </tmp/dsh-doctor-dump.$$) lines)"
-  for row in mobile-shell web-pwa stop-gate; do
+  for row in remote-auth stop-gate session-message; do
     grep -q "$row" "/tmp/dsh-doctor-dump.$$" && ok "row: $row" || warn "row missing: $row"
   done
 else
