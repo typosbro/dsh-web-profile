@@ -7,7 +7,8 @@
     "@local/browser-pane": "link:../../plugins/browser-pane",
     "@local/playwright-browser": "link:../../plugins/playwright-browser",
     "@playwright/mcp": "0.0.83",
-    "@local/dsh-web-search-local": "link:../../plugins/web-search"
+    "@local/dsh-web-search-local": "link:../../plugins/web-search",
+    "@local/dsh-orchestrator-preset": "link:/Users/typosbro/src/dsh-web-profile/presets/orchestrator"
   },
   "dsh": {
     "profile": {
@@ -19,7 +20,10 @@
         "@deepseek-ai/dsh-experimental-session-search",
         "@deepseek-ai/dsh-experimental-session-titles-bundle",
         "@deepseek-ai/dsh-experimental-tool-worktree",
-        "@local/dsh-web-search-local"
+        "@local/dsh-web-search-local",
+        "@deepseek-ai/dsh-experimental-auto-review",
+        "@deepseek-ai/dsh-experimental-ralph-bundle",
+        "@local/dsh-orchestrator-preset"
       ],
       "patchReload": "live"
     }
