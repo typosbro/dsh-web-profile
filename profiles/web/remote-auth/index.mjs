@@ -130,13 +130,14 @@ export function apply(ctx) {
   const trustedHosts = () => connection.trustedHosts ?? []
 
   /**
-   * True when this request authority may skip the browser token. Loopback is not
-   * exempt: the Electron shell's own handshake depends on the token/cookie exchange.
+   * True when this request authority may skip the browser token. Loopback is exempt on this
+   * CLI-only deployment (no Desktop app); launch-token requests still reach the
+   * real exchange via carriesLaunchToken below.
    */
   const exempt = (headers) => {
     const authority = authorityOf(headers)
     if (authority === undefined) return false
-    if (isLoopbackHostname(authority.hostname)) return false
+    if (isLoopbackHostname(authority.hostname)) return true
     return trustedHosts().some((entry) => matchesTrusted(entry, authority))
   }
 
