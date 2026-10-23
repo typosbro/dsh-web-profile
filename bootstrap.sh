@@ -51,6 +51,9 @@ rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/plugins/" "$D
 rsync -a "$REPO_DIR/hooks/" "$DSH_HOME/hooks/"
 chmod +x "$DSH_HOME/hooks/stop-gate.sh"
 
+say "skills"
+"$REPO_DIR/scripts/sync-skills.sh"
+
 say "paths"
 python3 - "$DSH_HOME" "$NODE_BIN" "$CACHE_DIR" "$DSH_HOME/plugins" <<'PY'
 import pathlib, sys

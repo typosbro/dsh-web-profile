@@ -1,0 +1,6 @@
+- insert:
+    - id: web-search-local
+      name: '@local/dsh-web-search-local'
+- id: web
+  config:
+    searchProvider: local-duckduckgo

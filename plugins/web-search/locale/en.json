@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Local Web Search",
+    "description": "Keyless web search that runs on this machine through DuckDuckGo and becomes the active search provider once installed."
+  }
+}
