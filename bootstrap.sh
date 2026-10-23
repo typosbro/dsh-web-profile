@@ -44,10 +44,11 @@ if [ -e "$PROFILE_DIR" ]; then
   mv "$PROFILE_DIR" "$BACKUP"
   printf 'backed up existing profile to %s\n' "$BACKUP"
 fi
-mkdir -p "$DSH_HOME/profiles" "$DSH_HOME/plugins" "$DSH_HOME/hooks" \
+mkdir -p "$DSH_HOME/profiles" "$DSH_HOME/plugins" "$DSH_HOME/hooks" "$DSH_HOME/presets" \
          "$CACHE_DIR/dsh-browser-profile" "$CACHE_DIR/dsh-browser-out"
 rsync -a --delete "$REPO_DIR/profiles/web/" "$PROFILE_DIR/"
 rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/plugins/" "$DSH_HOME/plugins/"
+rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/presets/" "$DSH_HOME/presets/"
 rsync -a "$REPO_DIR/hooks/" "$DSH_HOME/hooks/"
 chmod +x "$DSH_HOME/hooks/stop-gate.sh"
 

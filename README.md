@@ -80,6 +80,29 @@ knowing `approval: never` removes the last prompt before a destructive command.
 The experimental bundles ship inside `dsh`, not the profile, so they need no
 version pinning — reproducing them requires only the `bundles` array above.
 
+## Reproducing this machine
+
+`./bootstrap.sh` is the whole install: it links dsh, installs the profile, copies
+`plugins/` and `presets/` into `$DSH_HOME`, syncs `skills/` into `$DSH_HOME/skills`,
+installs the profile's dependencies from the frozen lockfile, and runs the doctor.
+
+Everything needed to rebuild is in git **except** deliberate machine state:
+
+- `dsh-relay` pairing — the relay's password and the per-device bearer tokens live
+  in the relay's `stateDir`, never in this repo. After a rebuild, set the password
+  again at `https://127.0.0.1:3443` and re-pair the phone.
+- `~/.dsh/.credentials.yaml` and `~/.dsh/.env` — API keys, never committed.
+- Sessions, attachments, scored state — `$DSH_HOME`.
+
+The browser stack (`plugins/playwright-browser`, `browser-pane`, `browser-live`) is
+kept in the tree but its dependencies are no longer declared, because this machine
+does not enable it. Add them back with:
+
+```bash
+dsh plugin --profile web add @playwright/mcp
+pnpm --dir "$HOME/.dsh/profiles/web" add @local/browser-pane @local/playwright-browser @local/browser-live
+```
+
 ## Toolbox
 
 Dependency-free scripts, plus skills that teach the agent when to run them:

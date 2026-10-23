@@ -2,13 +2,8 @@
   "name": "dsh-profile-web",
   "private": true,
   "dependencies": {
-    "@deepseek-ai/dsh-subagent-codex": "0.2.1-alpha.1",
-    "@local/browser-live": "link:../../plugins/browser-live",
-    "@local/browser-pane": "link:../../plugins/browser-pane",
-    "@local/playwright-browser": "link:../../plugins/playwright-browser",
-    "@playwright/mcp": "0.0.83",
+    "@local/dsh-orchestrator-preset": "link:../../presets/orchestrator",
     "@local/dsh-web-search-local": "link:../../plugins/web-search",
-    "@local/dsh-orchestrator-preset": "link:/Users/typosbro/src/dsh-web-profile/presets/orchestrator",
     "dsh-relay": "^0.2.1"
   },
   "dsh": {
