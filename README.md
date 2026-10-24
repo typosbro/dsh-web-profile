@@ -94,6 +94,14 @@ Everything needed to rebuild is in git **except** deliberate machine state:
 - `~/.dsh/.credentials.yaml` and `~/.dsh/.env` — API keys, never committed.
 - Sessions, attachments, scored state — `$DSH_HOME`.
 
+`dsh-relay` itself is pinned to the head of
+[PR #12](https://github.com/sorsama/deepseek-harness-relay/pull/12)
+(`hazyumps/deepseek-harness-relay@36321a6`, version 0.3.1): the published
+`0.2.1` tarball's client half waits on the removed `settingsScope` service, so
+the web boot fails on dsh 0.2.x, and its host bundle predates the harness
+browser-session signing, so paired devices get 401. Move back to the registry
+once a fixed 0.3.x is published.
+
 The browser stack (`plugins/playwright-browser`, `browser-pane`, `browser-live`) is
 kept in the tree but its dependencies are no longer declared, because this machine
 does not enable it. Add them back with:
