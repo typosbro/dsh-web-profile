@@ -1,0 +1,34 @@
+# Headless model route — overlay for the `headless` profile.
+#
+# Premise: `headless` bundles dsh-base + dsh-headless with an empty user patch, so it
+# keeps the base route (llm-deepseek → deepseek-official → DEEPSEEK_API_KEY) and fails
+# on this machine with MISSING_CREDENTIAL. These two rows mirror the working web route
+# (profiles/web/cordis.patch.yml) so `dsh --profile headless "task"` can run.
+#
+# Apply as a per-run overlay (no live mutation):
+#   dsh --profile headless \
+#     --patch "$REPO/profiles/headless/headless-providers.cordis.patch.yml" "task"
+#
+# Owner edit to make it permanent: append these rows to
+# ~/.dsh/profiles/headless/cordis.patch.yml, then leave --patch off.
+#
+# Notes:
+# - llm-pi-ai already exists in dsh-base; a patch replaces the row's whole config, so
+#   the providers dictionary is repeated here in full.
+# - No `models` list on purpose: omitting it keeps the installed pi-ai catalog for
+#   opencode-go (29 ids); declaring models replaces the catalog wholesale.
+# - The key lives in $DSH_HOME/.env (OPENCODE_GO_API_KEY); never put it here.
+
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      opencode-go:
+        apiKeyEnv: OPENCODE_GO_API_KEY
+
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    reasoningEffort: max

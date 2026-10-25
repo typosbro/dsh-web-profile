@@ -4,7 +4,7 @@
   "dependencies": {
     "@local/dsh-orchestrator-preset": "link:../../presets/orchestrator",
     "@local/dsh-web-search-local": "link:../../plugins/web-search",
-    "dsh-relay": "^0.2.1"
+    "dsh-relay": "github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8"
   },
   "dsh": {
     "profile": {

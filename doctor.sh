@@ -22,6 +22,15 @@ command -v node >/dev/null 2>&1 && ok "node $(node -v)" || bad "node missing"
 command -v pnpm >/dev/null 2>&1 && ok "pnpm $(pnpm -v)" || warn "pnpm missing (needed only to reinstall)"
 
 [ -f "$PROFILE_DIR/cordis.patch.yml" ] && ok "patch layer present" || bad "cordis.patch.yml missing"
+
+# Agent-OS tooling shipped in this repo (optional; a fresh clone should have it).
+for tool in scripts/consult-codex.sh scripts/night-batch.sh scripts/usage-meter.mjs; do
+  [ -x "$REPO_DIR/$tool" ] && ok "tool: $tool" || warn "tool missing or not executable: $tool"
+done
+[ -f "$REPO_DIR/skills/consult-codex/SKILL.md" ] \
+  && ok "skill: consult-codex" || warn "skill missing: consult-codex"
+[ -f "$REPO_DIR/profiles/headless/headless-providers.cordis.patch.yml" ] \
+  && ok "headless provider overlay present" || warn "headless provider overlay missing"
 [ -f "$PROFILE_DIR/gate/index.mjs" ] && ok "stop-gate plugin present" || warn "stop-gate plugin missing"
 grep -q "@DSH_HOME@" "$PROFILE_DIR/cordis.patch.yml" 2>/dev/null \
   && bad "unsubstituted @DSH_HOME@ token in the installed patch" \
@@ -42,6 +51,9 @@ if ( cd "$PROFILE_DIR" && $TIMEOUT_BIN dsh --profile "$PROFILE_NAME" --dump-conf
   for row in remote-auth stop-gate session-message; do
     grep -q "$row" "/tmp/dsh-doctor-dump.$$" && ok "row: $row" || warn "row missing: $row"
   done
+  grep -q 'maxDepth: 2' "/tmp/dsh-doctor-dump.$$" \
+    && ok "orchestrator preset: subagent maxDepth 2" \
+    || warn "orchestrator preset: no maxDepth 2 (Web preset editor may override the file)"
 else
   bad "profile does not compose: $(head -3 /tmp/dsh-doctor-err.$$ | tr '\n' ' ')"
 fi

@@ -41,6 +41,17 @@ Model access is deliberately not installed. Set `DEEPSEEK_API_KEY` in `~/.dsh/.e
 native route, or add an OpenAI-compatible provider with `examples/providers.cordis.patch.yml`.
 See [docs/models.md](docs/models.md).
 
+`dsh --profile headless "task"` is the scripting path, and its profile carries no provider
+rows — it keeps the base `deepseek-official` route and fails `MISSING_CREDENTIAL` when that
+key is absent. Mirror the web route for one run with
+[`profiles/headless/headless-providers.cordis.patch.yml`](profiles/headless/headless-providers.cordis.patch.yml):
+
+```bash
+dsh --profile headless --patch "$PWD/profiles/headless/headless-providers.cordis.patch.yml" "task"
+```
+
+Permanent form and credential caveats: [profiles/headless/README.md](profiles/headless/README.md).
+
 Re-running: `FORCE=1 ./bootstrap.sh` replaces the profile and keeps a timestamped backup.
 Verify any install with `./doctor.sh`.
 
@@ -94,6 +105,14 @@ Everything needed to rebuild is in git **except** deliberate machine state:
 - `~/.dsh/.credentials.yaml` and `~/.dsh/.env` — API keys, never committed.
 - Sessions, attachments, scored state — `$DSH_HOME`.
 
+`dsh-relay` itself is pinned to the head of
+[PR #12](https://github.com/sorsama/deepseek-harness-relay/pull/12)
+(`hazyumps/deepseek-harness-relay@36321a6`, version 0.3.1): the published
+`0.2.1` tarball's client half waits on the removed `settingsScope` service, so
+the web boot fails on dsh 0.2.x, and its host bundle predates the harness
+browser-session signing, so paired devices get 401. Move back to the registry
+once a fixed 0.3.x is published.
+
 The browser stack (`plugins/playwright-browser`, `browser-pane`, `browser-live`) is
 kept in the tree but its dependencies are no longer declared, because this machine
 does not enable it. Add them back with:
@@ -113,6 +132,14 @@ Dependency-free scripts, plus skills that teach the agent when to run them:
   descriptions) from on-demand skill bodies, finds rules written three times, and catches
   skill-name collisions.
 - `scripts/wt.sh` — one git worktree per task, beside the repo, with the gate run on finish.
+- `scripts/consult-codex.sh` — one-shot second opinion from OpenAI Codex
+  (`codex exec … --json`, read-only): a diff review, a claim check, or a GPT-family answer on
+  a separate quota. Paired skill: `skills/consult-codex/`.
+- `scripts/usage-meter.mjs` — per-turn and per-session token totals from the persisted
+  `session.v4.jsonl.zstd` logs (input / output / cache-read), for a daily brief.
+- `scripts/night-batch.sh` — dry-run-first skeleton for unattended headless batches: explicit
+  task list, hard caps, coarse no-external-sends guard, briefs under `docs/agent-os/runs/`.
+  Needs the headless route (below) and a valid credential.
 - `hooks/stop-gate.sh` — runs the repository's gate, then a diff-level review stage
   (`examples/agent-review.sh`) that blocks on leaked keys, conflict markers, and `debugger`
   statements.
