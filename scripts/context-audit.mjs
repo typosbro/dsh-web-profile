@@ -130,6 +130,7 @@ for (const rootDir of uniqueRoots([
   join(home, '.agents', 'skills'),
   join(root, '.agents', 'skills'),
   join(root, '.claude', 'skills'),
+  join(home, '.dsh', 'skills'),
   join(home, 'agent-memory', 'skills'),
 ])) {
   for (const file of listSkillFiles(rootDir)) {

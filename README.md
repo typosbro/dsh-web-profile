@@ -194,3 +194,9 @@ MIT. The Playwright MCP server it pins is Apache-2.0; DeepSeek Harness is MIT.
 - [docs/upgrading.md](docs/upgrading.md) — moving to 0.2.1-rc.2 and unlocking the plugin ecosystem.
 - [docs/ideas-from-other-harnesses.md](docs/ideas-from-other-harnesses.md) — the survey that
   started this.
+- [docs/agent-os/README.md](docs/agent-os/README.md) — unattended runs: night batch, briefs,
+  per-run token spend, and the safety model.
+- [docs/harness-comparison-2026-10.md](docs/harness-comparison-2026-10.md) — DSH vs Pi vs omp,
+  how Claude Code and Codex do teams and workflows, and what this profile borrows.
+- [docs/orchestration-repos-and-context-budget-2026-10.md](docs/orchestration-repos-and-context-budget-2026-10.md)
+  — public orchestration repos worth copying, plus the instruction and skill budget evidence.
