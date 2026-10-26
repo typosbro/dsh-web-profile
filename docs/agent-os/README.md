@@ -84,3 +84,16 @@ in these session totals.
 independent model for review and verification. Use it for adversarial review of a
 diff, a second opinion on a risky claim, or a GPT-family answer when OpenCode Go is
 limited. Read-only, one-shot, separate ChatGPT quota; never pass secrets.
+
+## Live schedule (approved 2026-10-26)
+
+The owner approved the 04:30 schedule after T5 cleared. It is a host-durable daily
+schedule in the web session:
+
+- 04:30 Asia/Seoul, caps `--max-tasks 4 --task-timeout 900 --total-timeout 3600`.
+- The task file stays `docs/agent-os/night-batch.tasks.example.md` until a real list exists.
+- Report failures only; never push, deploy or send externally.
+- First manual run the same day proved the fence (caps enforced, briefs written, no
+  external sends) and found a `printf` option-parsing bug in this script, fixed in
+  commit `442f4a4`. The 240s manual caps were too short for these tasks; the scheduled
+  run uses the approved 900s.
