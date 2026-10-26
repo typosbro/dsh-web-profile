@@ -95,7 +95,7 @@ function frontmatter(text) {
   const lines = match[1].split('\n');
   const out = {};
   for (let i = 0; i < lines.length; i += 1) {
-    const kv = /^([A-Za-z_]+):\s*(.*)$/.exec(lines[i]);
+    const kv = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(lines[i]);
     if (!kv) continue;
     let [, key, value] = kv;
     if (/^[>|][-+]?$/.test(value.trim())) {
@@ -140,8 +140,21 @@ for (const rootDir of uniqueRoots([
     const meta = frontmatter(text);
     const name = meta.name ?? file.split('/').at(-2);
     const description = meta.description ?? '';
-    files.push({ file, kind: 'skill', text, name, description, resident: tokens(`${name} ${description}`), body: tokens(text) });
-    skills.push({ file, name, description });
+    const userInvoked = meta['disable-model-invocation'] === 'true';
+    files.push({
+      file,
+      kind: 'skill',
+      text,
+      name,
+      description,
+      userInvoked,
+      // User-invoked skills are absent from the model catalog, so their description
+      // costs nothing per request. Counting it inflated the resident number and hid
+      // the real budget position.
+      resident: userInvoked ? 0 : tokens(`${name} ${description}`),
+      body: tokens(text),
+    });
+    skills.push({ file, name, description, userInvoked });
     if (!seenNames.has(name)) seenNames.set(name, []);
     seenNames.get(name).push(file);
   }
@@ -152,8 +165,9 @@ const rows = files
     file: entry.file,
     kind: entry.kind,
     name: entry.name,
-    resident: entry.kind === 'agents' ? entry.resident : entry.resident,
+    resident: entry.resident,
     body: entry.body ?? entry.resident,
+    userInvoked: entry.userInvoked === true,
   }))
   .sort((a, b) => b.resident - a.resident);
 
@@ -184,8 +198,11 @@ const result = { root, resident: residentTotal, onDemand: onDemandTotal, budget:
 if (args.json) {
   console.log(JSON.stringify(result, null, 2));
 } else {
+  const modelInvoked = skills.filter((skill) => !skill.userInvoked).length;
+  const userInvokedCount = skills.length - modelInvoked;
   console.log(`# context audit — ${rows.length} files`);
-  console.log(`resident:  ~${residentTotal} tokens (AGENTS.md + ${skills.length} skill descriptions, on every request)`);
+  console.log(`resident:  ~${residentTotal} tokens (AGENTS.md + ${modelInvoked} model-invoked skill descriptions, on every request)`);
+  console.log(`user-invoked: ${userInvokedCount} skills, 0 resident (absent from the model catalog)`);
   console.log(`on-demand: ~${onDemandTotal} tokens across skill bodies (loaded only when invoked)`);
   console.log(`largest skill body: ${largestSkill ? `${largestSkill.body} tokens ${largestSkill.file.replace(home, '~')}` : 'none'}`);
   console.log('');

@@ -1,6 +1,12 @@
 - insert:
     - id: web-search-local
       name: '@local/dsh-web-search-local'
+# Name both providers explicitly. The base bundle mounts web-fetch-http (provider
+# `http`) AND web-deepseek-api (provider `deepseek-fetch-api`), so tool-web sees two
+# usable fetch providers and every web_fetch call fails with "multiple usable web
+# providers are registered ... configure one explicitly". searchProvider was set
+# here; fetchProvider was not. Keep both keys: a config override replaces the row.
 - id: web
   config:
     searchProvider: local-duckduckgo
+    fetchProvider: http

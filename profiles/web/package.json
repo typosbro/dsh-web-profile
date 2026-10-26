@@ -4,7 +4,8 @@
   "dependencies": {
     "@local/dsh-orchestrator-preset": "link:../../presets/orchestrator",
     "@local/dsh-web-search-local": "link:../../plugins/web-search",
-    "dsh-relay": "github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8"
+    "dsh-relay": "github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8",
+    "@local/dsh-worker-preset": "link:../../presets/worker"
   },
   "dsh": {
     "profile": {
@@ -20,6 +21,7 @@
         "@deepseek-ai/dsh-experimental-auto-review",
         "@deepseek-ai/dsh-experimental-ralph-bundle",
         "@local/dsh-orchestrator-preset",
+        "@local/dsh-worker-preset",
         "dsh-relay"
       ],
       "patchReload": "live"

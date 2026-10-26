@@ -14,6 +14,9 @@ importers:
       '@local/dsh-web-search-local':
         specifier: link:../../plugins/web-search
         version: link:../../plugins/web-search
+      '@local/dsh-worker-preset':
+        specifier: link:../../presets/worker
+        version: link:../../presets/worker
       dsh-relay:
         specifier: github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8
         version: https://codeload.github.com/hazyumps/deepseek-harness-relay/tar.gz/36321a6ed914166186db84a1ceb514e6283e95e8

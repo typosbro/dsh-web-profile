@@ -89,3 +89,46 @@ version.
   decision, not a profile default.
 - Search routing: the shipped route bills a model turn per search; `examples/` shows the
   free local alternative instead of silently changing it.
+
+## Tool-web provider selection (2026-10-26)
+
+The base bundle mounts two fetch providers: `web-fetch-http` (provider `http`) and
+`web-deepseek-api` (provider `deepseek-fetch-api`). `tool-web` was configured with
+`fetch: true` and no explicit provider, so every `web_fetch` call failed with
+"multiple usable web providers are registered". `searchProvider` had already been named
+by the local search plugin; `fetchProvider` had not. Both are now named explicitly, in
+the plugin patch (so a fresh bootstrap is correct) and in the profile patch (bundle
+patches are not hot-reloaded, the profile patch is). Doctor fails if the ambiguity
+returns.
+
+## DeepSeek account plugin disabled (2026-10-26)
+
+`llm-deepseek-account` polls `/auth-api/v0/users/current` with an unauthenticated
+session and logs a 403 on every retry, indefinitely. Model access uses the API-key
+route (`llm-deepseek`), which works. The account surface is not used on this machine, so
+the row is disabled rather than tolerated as log noise.
+
+## hooks/ removed (2026-10-26)
+
+The `@deepseek-ai/dsh-hooks-claude-code` bridge was never mounted in this profile — the
+native `gate/index.mjs` plugin replaced it. But `bootstrap.sh` kept installing
+`~/.dsh/hooks/hooks.json`, so a hook file existed that could never run. A dead hook file
+is worse than none: someone edits it and believes it enforces something. The directory
+and the installed file are gone; doctor asserts the bridge is not mounted and the hook
+file is absent.
+
+## worker preset (2026-10-26)
+
+The 2026 harness audit found that per-agent tool-schema pruning was claimed but not
+built: every child inherited the orchestrator's full surface. The `worker` preset keeps
+instructions, filesystem, bash, jobs, skills, todos and compaction, and drops
+delegation, workflow, ralph, scheduling, web, presentation, plugin management, goals,
+plan mode and ask-user. A child that needs those is being used wrong.
+
+## Credential source of truth (2026-10-26)
+
+The CLI reads `~/.dsh/.env`; the running web process reads the credential store. They
+had drifted, which is why headless failed with `401 api_key_expired` while the web app
+worked. `.env` is now synced from the store and doctor compares the two without printing
+either value. The headless overlay is installed in the live headless profile, so
+`dsh --profile headless` authenticates.

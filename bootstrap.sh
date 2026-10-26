@@ -11,7 +11,7 @@ set -euo pipefail
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
 PROFILE_NAME="${PROFILE_NAME:-web}"
-DSH_VERSION="${DSH_VERSION:-0.2.1-alpha.1}"
+DSH_VERSION="${DSH_VERSION:-0.2.1-rc.2}"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}"
 FORCE="${FORCE:-0}"
 WITH_PLAYWRIGHT="${WITH_PLAYWRIGHT:-0}"
@@ -44,13 +44,11 @@ if [ -e "$PROFILE_DIR" ]; then
   mv "$PROFILE_DIR" "$BACKUP"
   printf 'backed up existing profile to %s\n' "$BACKUP"
 fi
-mkdir -p "$DSH_HOME/profiles" "$DSH_HOME/plugins" "$DSH_HOME/hooks" "$DSH_HOME/presets" \
+mkdir -p "$DSH_HOME/profiles" "$DSH_HOME/plugins" "$DSH_HOME/presets" \
          "$CACHE_DIR/dsh-browser-profile" "$CACHE_DIR/dsh-browser-out"
 rsync -a --delete "$REPO_DIR/profiles/web/" "$PROFILE_DIR/"
 rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/plugins/" "$DSH_HOME/plugins/"
 rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/presets/" "$DSH_HOME/presets/"
-rsync -a "$REPO_DIR/hooks/" "$DSH_HOME/hooks/"
-chmod +x "$DSH_HOME/hooks/stop-gate.sh"
 
 say "skills"
 "$REPO_DIR/scripts/sync-skills.sh"
@@ -66,7 +64,7 @@ tokens = {
     "@CACHE_DIR@": cache,
     "@PLUGIN_DIR@": plugins,
 }
-roots = [pathlib.Path(home, "profiles", "web"), pathlib.Path(home, "plugins"), pathlib.Path(home, "hooks")]
+roots = [pathlib.Path(home, "profiles", "web"), pathlib.Path(home, "plugins")]
 stdlib = {".yml", ".yaml", ".json", ".mjs", ".js", ".sh"}
 for root in roots:
     for path in root.rglob("*"):

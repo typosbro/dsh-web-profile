@@ -2,7 +2,7 @@
 
 A reproducible profile for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`):
 web GUI, phone-sized shell, installable PWA, a pinned Playwright browser stack, and a
-stop-gate hook that refuses to end a turn on "looks done" when the repository has a gate.
+stop-gate plugin that refuses to end a turn on "looks done" when the repository has a gate.
 
 This is the "everything is a plugin" harness configured the way an agent actually needs to run:
 a declarative patch layer, pinned versions, a doctor that proves the composition, and no
@@ -13,7 +13,7 @@ credentials in the tree.
 ```bash
 git clone https://github.com/<you>/dsh-web-profile.git
 cd dsh-web-profile
-./bootstrap.sh          # installs dsh 0.2.1-alpha.1, the profile, plugins, hooks
+./bootstrap.sh          # installs dsh 0.2.1-rc.2, the profile and plugins
 dsh web                 # http://127.0.0.1:3080/
 ```
 
@@ -29,10 +29,12 @@ The same plugin files run under either host:
 
 The stop gate is a plain host plugin (`gate/index.mjs`) that listens to
 `agent/turn-stopping`, runs the repository's gate, and steers a message back when it
-fails. It deliberately replaces the earlier `@deepseek-ai/dsh-hooks-claude-code` row:
-that package is not shipped by the Desktop app and peer-depends on the whole 0.2.1
-stack, so a machine without the dsh CLI could never mount it. `hooks/` is kept for
-CLI setups that already install the Claude Code bridge.
+fails. It replaces the earlier `@deepseek-ai/dsh-hooks-claude-code` row: that package
+is not shipped by the Desktop app and peer-depends on the whole 0.2.1 stack, so a
+machine without the dsh CLI could never mount it. The `hooks/` directory and the
+Claude Code bridge were removed on 2026-10-26: the bridge is not mounted in any
+profile here, so the hook file could never run, and a dead hook file is worse than
+none — someone edits it and believes it is enforcing something.
 
 Requirements: Linux or macOS, Node 22+, pnpm (`corepack enable`), `rsync`, `python3`, and a
 system Chrome/Chromium for the browser tools.
@@ -66,6 +68,7 @@ Verify any install with `./doctor.sh`.
 | Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `profiles/web/gate/` |
 | Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
+| Agent presets | `orchestrator` (acts first, escalates decisions, chooses team vs subagent vs workflow) and `worker` (lean child: no delegation, no web, no schedule, no deploy) | `presets/orchestrator/`, `presets/worker/` |
 
 ### Enabled on the author's Mac (2026-10-23)
 
@@ -140,9 +143,9 @@ Dependency-free scripts, plus skills that teach the agent when to run them:
 - `scripts/night-batch.sh` — dry-run-first skeleton for unattended headless batches: explicit
   task list, hard caps, coarse no-external-sends guard, briefs under `docs/agent-os/runs/`.
   Needs the headless route (below) and a valid credential.
-- `hooks/stop-gate.sh` — runs the repository's gate, then a diff-level review stage
-  (`examples/agent-review.sh`) that blocks on leaked keys, conflict markers, and `debugger`
-  statements.
+- `profiles/web/gate/index.mjs` — the live stop gate: runs the repository's gate, then a
+  diff-level review stage that blocks on leaked keys, conflict markers, and `debugger`
+  statements. At most two forced continuations per session.
 - `bench/run.mjs` — runs one task on two model routes and keeps both transcripts, exits, and
   durations. Harness changes get measured, not argued.
 

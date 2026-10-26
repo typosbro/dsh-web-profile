@@ -11,6 +11,6 @@ REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${DSH_HOME:-$HOME/.dsh}/skills"
 
 mkdir -p "$DEST"
-rsync -a --exclude .DS_Store "$REPO_DIR/skills/" "$DEST/"
+rsync -a --delete --exclude .DS_Store "$REPO_DIR/skills/" "$DEST/"
 printf 'synced %s skills -> %s\n' \
   "$(find "$DEST" -maxdepth 1 -mindepth 1 -type d | wc -l | tr -d ' ')" "$DEST"

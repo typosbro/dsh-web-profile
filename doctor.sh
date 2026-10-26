@@ -54,6 +54,15 @@ if ( cd "$PROFILE_DIR" && $TIMEOUT_BIN dsh --profile "$PROFILE_NAME" --dump-conf
   grep -q 'maxDepth: 2' "/tmp/dsh-doctor-dump.$$" \
     && ok "orchestrator preset: subagent maxDepth 2" \
     || warn "orchestrator preset: no maxDepth 2 (Web preset editor may override the file)"
+  grep -q 'fetchProvider: http' "/tmp/dsh-doctor-dump.$$" \
+    && ok "web fetch provider named explicitly" \
+    || bad "web fetch provider ambiguous: web_fetch will fail (see plugins/web-search/cordis.patch.yml)"
+  grep -q 'dsh-hooks-claude-code' "/tmp/dsh-doctor-dump.$$" \
+    && bad "dead hook bridge mounted (hooks/ was removed 2026-10-26)" \
+    || ok "no dead hook bridge"
+  grep -q 'preset-worker' "/tmp/dsh-doctor-dump.$$" \
+    && ok "worker preset registered" \
+    || warn "worker preset not registered"
 else
   bad "profile does not compose: $(head -3 /tmp/dsh-doctor-err.$$ | tr '\n' ' ')"
 fi
@@ -71,6 +80,24 @@ if [ -n "${DEEPSEEK_API_KEY:-}" ] || [ -s "$DSH_HOME/.env" ] || [ -s "$DSH_HOME/
 else
   warn "no credentials found; set DEEPSEEK_API_KEY or a provider key"
 fi
+
+# Credential sources: the CLI reads ~/.dsh/.env, the running web process reads the
+# credential store. Drift between them is what made headless fail while the web app
+# worked. Compare without printing either value.
+ENV_GO="$(grep -m1 '^OPENCODE_GO_API_KEY=' "$DSH_HOME/.env" 2>/dev/null | cut -d= -f2-)"
+STORE_GO="$(awk '/^[[:space:]]*OPENCODE_GO_API_KEY:/{sub(/^[[:space:]]*OPENCODE_GO_API_KEY:[[:space:]]*/,"");print;exit}' "$DSH_HOME/.credentials.yaml" 2>/dev/null | tr -d '\"'"'"'')"
+if [ -n "$ENV_GO" ] && [ -n "$STORE_GO" ]; then
+  [ "$ENV_GO" = "$STORE_GO" ] \
+    && ok "env and credential store agree" \
+    || warn "env and credential store disagree: CLI reads .env, web reads the store"
+fi
+
+grep -q 'opencode-go' "$DSH_HOME/profiles/headless/cordis.patch.yml" 2>/dev/null \
+  && ok "headless route patched" \
+  || warn "headless route not patched (night batch cannot authenticate)"
+[ -f "$DSH_HOME/hooks/hooks.json" ] \
+  && warn "dead hook file present at ~/.dsh/hooks/hooks.json (bridge is not mounted)" \
+  || ok "no dead hook file"
 
 printf '\n%d failure(s), %d warning(s)\n\n' "$FAIL" "$WARN"
 [ "$FAIL" -eq 0 ]

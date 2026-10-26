@@ -63,3 +63,24 @@
     providers:
       opencode-go:
         apiKeyEnv: OPENCODE_GO_API_KEY
+
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    reasoningEffort: max
+
+# Tool-web provider selection. The base bundle mounts two fetch providers
+# (`http` from web-fetch-http and `deepseek-fetch-api` from web-deepseek-api), so
+# every web_fetch call fails with "multiple usable web providers are registered".
+# Name both providers explicitly; a config override replaces the row.
+- id: web
+  config:
+    searchProvider: local-duckduckgo
+    fetchProvider: http
+
+# The DeepSeek account plugin polls /auth-api/v0/users/current with an unauthenticated
+# session and logs a 403 on every retry. Model access uses the API-key route.
+- id: llm-deepseek-account
+  disabled: true
