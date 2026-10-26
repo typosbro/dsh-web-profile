@@ -89,7 +89,9 @@ function findSessionLogs(root) {
     for (const session of readdirSync(workspacePath, { withFileTypes: true })) {
       if (!session.isDirectory()) continue
       const dir = join(workspacePath, session.name)
-      for (const name of ['session.v4.jsonl.zstd', 'session.v4.jsonl', 'session.jsonl']) {
+      // Newest format first: a dir can hold both v3 and v4 for the same session,
+      // and the break below keeps us from double-counting the older copy.
+      for (const name of ['session.v4.jsonl.zstd', 'session.v4.jsonl', 'session.v3.jsonl.zstd', 'session.v3.jsonl', 'session.jsonl']) {
         const file = join(dir, name)
         if (!existsSync(file)) continue
         const stat = statSync(file)
