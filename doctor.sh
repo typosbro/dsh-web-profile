@@ -41,10 +41,15 @@ grep -q "@DSH_HOME@" "$PROFILE_DIR/cordis.patch.yml" 2>/dev/null \
 
 # A self-armed reload job killed the harness every 90s on 2026-10-26 (six turns lost).
 # It must never be loaded: a restart is an owner action, not something a turn schedules.
-if launchctl list 2>/dev/null | grep -q 'com\.typosbro\.dsh-reload'; then
-  bad "com.typosbro.dsh-reload is loaded — it kickstarts the web service every 90s (run: launchctl remove com.typosbro.dsh-reload)"
+if launchctl list 2>/dev/null | grep -q 'dsh-reload'; then
+  bad "a dsh-reload job is loaded — it kickstarts the web service on a timer (run: launchctl remove <label>)"
 else
   ok "no self-armed harness reload job"
+fi
+if grep -Rqs 'kickstart' "$HOME/Library/LaunchAgents" 2>/dev/null; then
+  bad "a LaunchAgent under ~/Library/LaunchAgents runs kickstart — a self-armed reload would outlive a logout"
+else
+  ok "no LaunchAgent runs kickstart"
 fi
 
 if [ -f "$PROFILE_DIR/package.json" ]; then
