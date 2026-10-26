@@ -48,3 +48,11 @@ the decision list once.
 
 Done means a change landed with a receipt, or exactly one decision is left and everything else is
 queued. "Let me know if you want me to..." is not an ending.
+
+## Harness safety
+
+Never restart, kickstart, unload, or kill the harness from inside a turn: `launchctl kickstart
+-k ...com.typosbro.dsh-web`, `launchctl submit ... dsh-reload`, `pkill dsh`. The turn dies with
+it — that was the 2026-10-26 crash loop (six kills in nine minutes). Edit the config, say what
+needs a restart, and leave the one-line command to the owner. A config edit is correct
+immediately and live after the next restart; the restart is the owner's call.
