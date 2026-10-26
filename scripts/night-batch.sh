@@ -153,7 +153,7 @@ run_with_timeout() { # $1 seconds, rest = command
 
 {
   printf '# Night batch %s\n\n' "$STAMP"
-  printf '- repo: `%s`\n- tasks: `%s`\n- caps: %ss/task, %ss total\n\n' "$REPO_DIR" "$TASKS_FILE" "$TASK_TIMEOUT" "$TOTAL_TIMEOUT"
+  printf -- '- repo: `%s`\n- tasks: `%s`\n- caps: %ss/task, %ss total\n\n' "$REPO_DIR" "$TASKS_FILE" "$TASK_TIMEOUT" "$TOTAL_TIMEOUT"
   printf '| # | status | duration | brief | task |\n|---|---|---|---|---|\n'
 } > "$RUN_DIR/SUMMARY.md"
 
@@ -189,7 +189,7 @@ while [ "$i" -lt "$PLANNED" ]; do
   fi
   {
     printf '# %s — task %s\n\n' "$NUM" "$STATUS"
-    printf '- task: %s\n- duration: %ss\n- exit: %s\n- raw events: `%s`\n- stderr: `%s`\n' \
+    printf -- '- task: %s\n- duration: %ss\n- exit: %s\n- raw events: `%s`\n- stderr: `%s`\n' \
       "$TASK" "$DUR" "$RC" "${RAW#$RUN_DIR/}" "${ERR#$RUN_DIR/}"
     printf '\n## Final answer\n\n'
     # dsh headless --json contract: opens with `session`, closes with `final`
