@@ -54,6 +54,28 @@ AUTH 401 even though the dry run and the plan are correct. The interim path for
 unattended work is an in-session `schedule_create` run (the web process's credential
 works); the batch skeleton is ready for when the CLI credential is refreshed.
 
+## Resolved 2026-10-26 — the CLI path authenticates
+
+The premises above were fixed, and the fix was credential plumbing, not the route:
+
+- `~/.dsh/.env` held a 67-character `OPENCODE_GO_API_KEY` while the credential store
+  held a different, valid 51-character key. The CLI reads `.env`; the web process reads
+  the store — that is why the web app worked and every fresh CLI failed.
+- `.env` is now synced from the store, and the overlay rows are installed in the live
+  `~/.dsh/profiles/headless/cordis.patch.yml`.
+- `doctor.sh` compares `.env` and the store without printing either value and warns on
+  drift.
+
+Verified the same day:
+
+```
+$ dsh --profile headless "Reply with exactly: HEADLESS_OK"
+HEADLESS_OK
+```
+
+`scripts/night-batch.sh --run` therefore executes: the first capped run completed one
+task in 218s with exit 0 (run directory `docs/agent-os/runs/2026-10-26T1807/`).
+
 ## Make it permanent (owner edit)
 
 Add the same rows to `~/.dsh/profiles/headless/cordis.patch.yml` (the live user layer).

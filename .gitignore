@@ -8,3 +8,5 @@ profiles/*/pnpm-lock.yaml.bak*
 plugins/*/node_modules/
 
 bench/results/
+
+docs/agent-os/runs/

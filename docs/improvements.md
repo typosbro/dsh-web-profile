@@ -14,11 +14,11 @@ that the survey missed.
 | Diff-level review gate | The stop hook now runs `scripts/agent-review.sh` after a passing gate and blocks on a credential, a conflict marker, or a `debugger` statement. A ready template is provided. | `hooks/stop-gate.sh`, `examples/agent-review.sh` |
 | Model A/B benchmark | `bench/run.mjs` runs one task on two routes and keeps both transcripts, durations, and exits. | `bench/run.mjs` |
 
-## Blocked on the harness version
+## Previously blocked on the harness version — resolved 2026-10-26
 
-The ecosystem plugins named in the survey target `@deepseek-ai/dsh-*@^0.2.1-rc.2`. This profile
-runs `0.2.1-alpha.1`. Semver puts `alpha.1` below `rc.2`, so the peer ranges do not satisfy and
-the plugins are not safe to mount:
+The ecosystem plugins named in the survey target `@deepseek-ai/dsh-*@^0.2.1-rc.2`. The profile
+runs `0.2.1-rc.2` (pinned in `bootstrap.sh:14`), so the peer ranges are satisfied and these are
+mountable, pending an owner decision:
 
 - `dsh-tool-search@0.1.8` (progressive tool schema disclosure)
 - `dsh-llm-fallbacks@0.6.8` (provider fallback chains)

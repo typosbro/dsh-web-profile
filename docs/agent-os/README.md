@@ -53,14 +53,15 @@ delivered back into the session that created it). A daily job is therefore:
 ```text
 schedule_create
   title: Night batch
-  prompt: Run `./scripts/night-batch.sh --tasks docs/agent-os/night-batch.tasks.example.md --run` from ~/src/dsh-web-profile, then append the run's SUMMARY.md spend line from `./scripts/usage-meter.mjs --json` to docs/agent-os/runs/<date>/brief.md. Do not push or deploy. Report failures only.
-  daily: 02:30:00 Asia/Seoul
+  prompt: Run `./scripts/night-batch.sh --tasks docs/agent-os/night-batch.tasks.example.md --run --max-tasks 4 --task-timeout 900 --total-timeout 3600` from ~/src/dsh-web-profile, then append the run's SUMMARY.md spend line from `./scripts/usage-meter.mjs --json` to docs/agent-os/runs/<date>/brief.md. Do not push or deploy. Report failures only.
+  daily: 04:30:00 Asia/Seoul
 ```
 
 That requires the session to be durable and the harness host running (it is, via the
-launchd `com.typosbro.dsh-web` job), and it needs the headless route patch applied to
-the live headless profile — the owner edit in `profiles/headless/README.md`. Until then
-the scheduled prompt will fail with `MISSING_CREDENTIAL`; keep the job dry-run only.
+launchd `com.typosbro.dsh-web` job) and the headless route patch applied to the live
+headless profile — done 2026-10-26, see `profiles/headless/README.md`. The scheduled
+prompt authenticates. Caps are wall-clock only: there is no token ceiling, so spend is
+bounded by task count and duration and reported after the fact.
 
 ## Spend in the daily brief
 

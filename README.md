@@ -79,8 +79,10 @@ exactly. The bundle list is the source of truth:
 `dsh-base`, `dsh-web-app`, and the official experimental bundles
 `dsh-experimental-voice-input-bundle`, `dsh-experimental-agent-team-profile`,
 `dsh-experimental-session-search`, `dsh-experimental-session-titles-bundle`,
-`dsh-experimental-tool-worktree`, plus `@local/dsh-web-search-local` from
-`plugins/web-search`.
+`dsh-experimental-tool-worktree`, `dsh-experimental-auto-review`,
+`dsh-experimental-ralph-bundle`, plus `@local/dsh-web-search-local` from
+`plugins/web-search`, `@local/dsh-orchestrator-preset`, `@local/dsh-worker-preset`,
+and `dsh-relay`.
 
 Declined on this machine and kept in the tree as optional: the **phone shell**
 (`mobile-shell/`), the **PWA** (`web-pwa/`) and the **browser stack**
