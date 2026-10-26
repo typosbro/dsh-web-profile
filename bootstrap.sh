@@ -53,6 +53,9 @@ rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/presets/" "$D
 say "skills"
 "$REPO_DIR/scripts/sync-skills.sh"
 
+say "instructions"
+"$REPO_DIR/scripts/sync-instructions.sh"
+
 say "paths"
 python3 - "$DSH_HOME" "$NODE_BIN" "$CACHE_DIR" "$DSH_HOME/plugins" <<'PY'
 import pathlib, sys

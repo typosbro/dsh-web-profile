@@ -22,9 +22,12 @@ command -v node >/dev/null 2>&1 && ok "node $(node -v)" || bad "node missing"
 command -v pnpm >/dev/null 2>&1 && ok "pnpm $(pnpm -v)" || warn "pnpm missing (needed only to reinstall)"
 
 [ -f "$PROFILE_DIR/cordis.patch.yml" ] && ok "patch layer present" || bad "cordis.patch.yml missing"
+[ -f "$DSH_HOME/AGENTS.md" ] && grep -q '^# Operator mode' "$DSH_HOME/AGENTS.md" \
+  && ok "global operator instructions installed" \
+  || warn "global operator instructions missing or stale (run scripts/sync-instructions.sh)"
 
 # Agent-OS tooling shipped in this repo (optional; a fresh clone should have it).
-for tool in scripts/consult-codex.sh scripts/night-batch.sh scripts/usage-meter.mjs; do
+for tool in scripts/consult-codex.sh scripts/night-batch.sh scripts/usage-meter.mjs scripts/sync-instructions.sh; do
   [ -x "$REPO_DIR/$tool" ] && ok "tool: $tool" || warn "tool missing or not executable: $tool"
 done
 [ -f "$REPO_DIR/skills/consult-codex/SKILL.md" ] \

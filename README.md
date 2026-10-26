@@ -69,6 +69,7 @@ Verify any install with `./doctor.sh`.
 | Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 | Agent presets | `orchestrator` (acts first, escalates decisions, chooses team vs subagent vs workflow) and `worker` (lean child: no delegation, no web, no schedule, no deploy) | `presets/orchestrator/`, `presets/worker/` |
+| Operator mode | every new session, in every project, loads the act-first contract: ship a reversible change or ask for one owner decision; report FIXED versus NEEDS YOUR DECISION, never a status page | `instructions/AGENTS.md` → `$DSH_HOME/AGENTS.md`; `skills/operator/` |
 
 ### Enabled on the author's Mac (2026-10-23)
 
@@ -98,7 +99,8 @@ version pinning — reproducing them requires only the `bundles` array above.
 
 `./bootstrap.sh` is the whole install: it links dsh, installs the profile, copies
 `plugins/` and `presets/` into `$DSH_HOME`, syncs `skills/` into `$DSH_HOME/skills`,
-installs the profile's dependencies from the frozen lockfile, and runs the doctor.
+installs `instructions/AGENTS.md` as `$DSH_HOME/AGENTS.md`, installs the profile's
+dependencies from the frozen lockfile, and runs the doctor.
 
 Everything needed to rebuild is in git **except** deliberate machine state:
 
@@ -134,6 +136,9 @@ Dependency-free scripts, plus skills that teach the agent when to run them:
 - `scripts/context-audit.mjs` — separates resident context cost (AGENTS.md plus skill
   descriptions) from on-demand skill bodies, finds rules written three times, and catches
   skill-name collisions.
+- `scripts/sync-instructions.sh` — installs the user-global operator contract as
+  `$DSH_HOME/AGENTS.md`, so a fresh session in any project starts in operator mode. Backs up a
+  differing existing file before replacing it.
 - `scripts/wt.sh` — one git worktree per task, beside the repo, with the gate run on finish.
 - `scripts/consult-codex.sh` — one-shot second opinion from OpenAI Codex
   (`codex exec … --json`, read-only): a diff review, a claim check, or a GPT-family answer on
@@ -149,9 +154,10 @@ Dependency-free scripts, plus skills that teach the agent when to run them:
 - `bench/run.mjs` — runs one task on two model routes and keeps both transcripts, exits, and
   durations. Harness changes get measured, not argued.
 
-The matching skills live in `skills/` (`repo-map`, `context-audit`, `worktree`); copy or symlink
-the directories into your skill root. See [docs/improvements.md](docs/improvements.md) for what
-else is worth doing and what is blocked on the harness version.
+The matching skills live in `skills/` (`operator`, `briefing`, `repo-map`, `context-audit`,
+`worktree`); copy or symlink the directories into your skill root. See
+[docs/improvements.md](docs/improvements.md) for what else is worth doing and what is blocked on
+the harness version.
 
 ## Why a profile at all
 

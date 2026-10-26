@@ -1,6 +1,6 @@
 ---
 name: briefing
-description: Report back verdict-first — the answer in the first sentence, evidence attached, and a decision block only when one is genuinely needed. Use for any status report, research finding, code-change summary, or when the owner says "just tell me", "get to the point", "bottom line", "what's the problem", or says a reply buried the answer.
+description: Report back verdict-first — the answer in the first sentence, evidence attached, and a FIXED versus NEEDS YOUR DECISION split instead of a status page. Use for any status report, progress update, research finding, code-change summary, or when the owner says "just tell me", "get to the point", "bottom line", "what's the problem", or says a reply buried the answer.
 ---
 
 # Briefing
@@ -33,6 +33,14 @@ Good:
 > - Durable Objects, Queues, R2, stream resume: zero handlers
 >
 > Next: diffing RDS against a Neon branch copy before anything else gets ported.
+
+## Operator variant
+
+When the request implies work, use the five-part operator shape: You asked for / Where it stands /
+Path A -> B -> C / Fixed without you / Needs your decision. The verdict, receipts and decision
+rules below still apply. The difference is that "Next" is not a plan for the owner: it is the
+change already made, plus the one decision left. The autonomy test and anti-patterns live in the
+`operator` skill.
 
 ## Receipts
 
