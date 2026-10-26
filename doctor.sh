@@ -39,6 +39,14 @@ grep -q "@DSH_HOME@" "$PROFILE_DIR/cordis.patch.yml" 2>/dev/null \
   && bad "unsubstituted @DSH_HOME@ token in the installed patch" \
   || ok "paths substituted"
 
+# A self-armed reload job killed the harness every 90s on 2026-10-26 (six turns lost).
+# It must never be loaded: a restart is an owner action, not something a turn schedules.
+if launchctl list 2>/dev/null | grep -q 'com\.typosbro\.dsh-reload'; then
+  bad "com.typosbro.dsh-reload is loaded — it kickstarts the web service every 90s (run: launchctl remove com.typosbro.dsh-reload)"
+else
+  ok "no self-armed harness reload job"
+fi
+
 if [ -f "$PROFILE_DIR/package.json" ]; then
   grep -q '"@playwright/mcp"' "$PROFILE_DIR/package-lock.json" 2>/dev/null \
     || grep -q 'playwright/mcp' "$PROFILE_DIR/pnpm-lock.yaml" 2>/dev/null \
