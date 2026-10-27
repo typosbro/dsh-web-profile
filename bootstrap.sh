@@ -53,11 +53,11 @@ rsync -a --delete --exclude node_modules --exclude .git "$REPO_DIR/presets/" "$D
 say "skills"
 "$REPO_DIR/scripts/sync-skills.sh"
 
-say "instructions"
-"$REPO_DIR/scripts/sync-instructions.sh"
-
-say "claude code"
-"$REPO_DIR/scripts/sync-claude.sh"
+say "agent-kit (instructions + portable skills)"
+KIT_DIR="${AGENT_KIT_DIR:-$(dirname "$REPO_DIR")/agent-kit}"
+[ -x "$KIT_DIR/install.sh" ] \
+  || { printf 'agent-kit not found at %s; clone git@github.com:typosbro/agent-kit.git there or set AGENT_KIT_DIR\n' "$KIT_DIR" >&2; exit 1; }
+"$KIT_DIR/install.sh" dsh
 
 say "paths"
 python3 - "$DSH_HOME" "$NODE_BIN" "$CACHE_DIR" "$DSH_HOME/plugins" <<'PY'
@@ -87,7 +87,7 @@ PY
 say "commands"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 mkdir -p "$BIN_DIR"
-for pair in "repo-map:scripts/repo-map.mjs" "context-audit:scripts/context-audit.mjs" "wt:scripts/wt.sh"; do
+for pair in "context-audit:scripts/context-audit.mjs"; do  # repo-map, wt: agent-kit/install.sh
   name="${pair%%:*}"; target="$REPO_DIR/${pair#*:}"
   chmod +x "$target"
   ln -sf "$target" "$BIN_DIR/$name"

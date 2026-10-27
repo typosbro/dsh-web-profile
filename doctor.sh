@@ -24,18 +24,23 @@ command -v pnpm >/dev/null 2>&1 && ok "pnpm $(pnpm -v)" || warn "pnpm missing (n
 [ -f "$PROFILE_DIR/cordis.patch.yml" ] && ok "patch layer present" || bad "cordis.patch.yml missing"
 [ -f "$DSH_HOME/AGENTS.md" ] && grep -q '^# Operator mode' "$DSH_HOME/AGENTS.md" \
   && ok "global operator instructions installed" \
-  || warn "global operator instructions missing or stale (run scripts/sync-instructions.sh)"
+  || warn "global operator instructions missing or stale (run agent-kit/install.sh dsh)"
 
-"$REPO_DIR/scripts/sync-claude.sh" --check >/dev/null 2>&1 \
-  && ok "claude code config matches repo" \
-  || warn "claude code config drifted (run scripts/sync-claude.sh --check)"
+KIT_DIR="${AGENT_KIT_DIR:-$(dirname "$REPO_DIR")/agent-kit}"
+if [ -x "$KIT_DIR/install.sh" ]; then
+  "$KIT_DIR/install.sh" --check dsh >/dev/null 2>&1 \
+    && ok "agent-kit instructions and skills in sync" \
+    || warn "agent-kit drift (run $KIT_DIR/install.sh --check dsh)"
+else
+  warn "agent-kit missing at $KIT_DIR (clone typosbro/agent-kit)"
+fi
 
 # Agent-OS tooling shipped in this repo (optional; a fresh clone should have it).
-for tool in scripts/consult-codex.sh scripts/night-batch.sh scripts/usage-meter.mjs scripts/sync-instructions.sh; do
+for tool in scripts/night-batch.sh scripts/usage-meter.mjs scripts/context-audit.mjs; do
   [ -x "$REPO_DIR/$tool" ] && ok "tool: $tool" || warn "tool missing or not executable: $tool"
 done
-[ -f "$REPO_DIR/skills/consult-codex/SKILL.md" ] \
-  && ok "skill: consult-codex" || warn "skill missing: consult-codex"
+[ -f "$DSH_HOME/skills/consult-codex/SKILL.md" ] \
+  && ok "skill: consult-codex (agent-kit)" || warn "skill missing: consult-codex (agent-kit)"
 [ -f "$REPO_DIR/profiles/headless/headless-providers.cordis.patch.yml" ] \
   && ok "headless provider overlay present" || warn "headless provider overlay missing"
 [ -f "$PROFILE_DIR/gate/index.mjs" ] && ok "stop-gate plugin present" || warn "stop-gate plugin missing"

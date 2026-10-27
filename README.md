@@ -69,7 +69,7 @@ Verify any install with `./doctor.sh`.
 | Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 | Agent presets | `orchestrator` (acts first, escalates decisions, chooses team vs subagent vs workflow) and `worker` (lean child: no delegation, no web, no schedule, no deploy) | `presets/orchestrator/`, `presets/worker/` |
-| Operator mode | every new session, in every project, loads the act-first contract: ship a reversible change or ask for one owner decision; report FIXED versus NEEDS YOUR DECISION, never a status page | `instructions/AGENTS.md` → `$DSH_HOME/AGENTS.md`; `skills/operator/` |
+| Operator mode | every new session, in every project, loads the act-first contract: ship a reversible change or ask for one owner decision; report FIXED versus NEEDS YOUR DECISION, never a status page | `agent-kit`: `instructions/AGENTS.md` → `$DSH_HOME/AGENTS.md`; `skills/operator/` |
 
 ### Enabled on the author's Mac (2026-10-23)
 
@@ -100,8 +100,8 @@ version pinning — reproducing them requires only the `bundles` array above.
 ## Reproducing this machine
 
 `./bootstrap.sh` is the whole install: it links dsh, installs the profile, copies
-`plugins/` and `presets/` into `$DSH_HOME`, syncs `skills/` into `$DSH_HOME/skills`,
-installs `instructions/AGENTS.md` as `$DSH_HOME/AGENTS.md`, installs the profile's
+`plugins/` and `presets/` into `$DSH_HOME`, syncs the DSH-only `skills/` into `$DSH_HOME/skills`,
+runs `../agent-kit/install.sh dsh` (operator contract plus the portable skills), installs the profile's
 dependencies from the frozen lockfile, and runs the doctor.
 
 Everything needed to rebuild is in git **except** deliberate machine state:
@@ -133,22 +133,13 @@ pnpm --dir "$HOME/.dsh/profiles/web" add @local/browser-pane @local/playwright-b
 
 Dependency-free scripts, plus skills that teach the agent when to run them:
 
-- `scripts/repo-map.mjs` — ranked, token-budgeted map of a repository. A directory tree says
-  what exists; this says what matters.
+Portable pieces (operator contract, skills, `repo-map`, `wt`, `consult-codex`, the Claude Code
+config) moved to the private `typosbro/agent-kit` repo on 2026-10-27, cloned beside this one.
+What stays here depends on DSH:
+
 - `scripts/context-audit.mjs` — separates resident context cost (AGENTS.md plus skill
   descriptions) from on-demand skill bodies, finds rules written three times, and catches
   skill-name collisions.
-- `scripts/sync-instructions.sh` — installs the user-global operator contract as
-  `$DSH_HOME/AGENTS.md`, so a fresh session in any project starts in operator mode. Backs up a
-  differing existing file before replacing it.
-- `scripts/sync-claude.sh` — installs the Claude Code user config from `claude/`
-  (`CLAUDE.md`, `settings.json`, the stop-gate hook) plus the skills named in
-  `claude/skills.txt` into `~/.claude`. `--check` reports drift, so edits made live (for
-  example through `/config`) get copied back here instead of dying with the disk.
-- `scripts/wt.sh` — one git worktree per task, beside the repo, with the gate run on finish.
-- `scripts/consult-codex.sh` — one-shot second opinion from OpenAI Codex
-  (`codex exec … --json`, read-only): a diff review, a claim check, or a GPT-family answer on
-  a separate quota. Paired skill: `skills/consult-codex/`.
 - `scripts/usage-meter.mjs` — per-turn and per-session token totals from the persisted
   `session.v4.jsonl.zstd` logs (input / output / cache-read), for a daily brief.
 - `scripts/night-batch.sh` — dry-run-first skeleton for unattended headless batches: explicit

@@ -69,7 +69,7 @@
   config:
     provider: opencode-go
     model: deepseek-v4.1-flash
-    reasoningEffort: max
+    reasoningEffort: medium
 
 # Tool-web provider selection. The base bundle mounts two fetch providers
 # (`http` from web-fetch-http and `deepseek-fetch-api` from web-deepseek-api), so
