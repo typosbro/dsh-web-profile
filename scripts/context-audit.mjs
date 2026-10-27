@@ -129,6 +129,7 @@ for (const file of agentFiles()) {
 }
 
 for (const rootDir of uniqueRoots([
+  join(home, '.dsh', 'skills'),
   join(home, '.agents', 'skills'),
   join(root, '.agents', 'skills'),
   join(root, '.claude', 'skills'),
