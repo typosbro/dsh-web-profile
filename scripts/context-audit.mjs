@@ -42,9 +42,11 @@ const root = resolve(args.root);
 const home = homedir();
 const tokens = (text) => Math.ceil(text.length / 4);
 
-/** AGENTS.md files that apply to this directory, nearest last. */
+/** AGENTS.md files that apply to this directory, nearest last; the profile-global file first. */
 function agentFiles() {
   const found = [];
+  const global = join(home, '.dsh', 'AGENTS.md');
+  if (existsSync(global)) found.push(global);
   let dir = root;
   for (;;) {
     const candidate = join(dir, 'AGENTS.md');
