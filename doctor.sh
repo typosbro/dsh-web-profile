@@ -26,6 +26,10 @@ command -v pnpm >/dev/null 2>&1 && ok "pnpm $(pnpm -v)" || warn "pnpm missing (n
   && ok "global operator instructions installed" \
   || warn "global operator instructions missing or stale (run scripts/sync-instructions.sh)"
 
+"$REPO_DIR/scripts/sync-claude.sh" --check >/dev/null 2>&1 \
+  && ok "claude code config matches repo" \
+  || warn "claude code config drifted (run scripts/sync-claude.sh --check)"
+
 # Agent-OS tooling shipped in this repo (optional; a fresh clone should have it).
 for tool in scripts/consult-codex.sh scripts/night-batch.sh scripts/usage-meter.mjs scripts/sync-instructions.sh; do
   [ -x "$REPO_DIR/$tool" ] && ok "tool: $tool" || warn "tool missing or not executable: $tool"

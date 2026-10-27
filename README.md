@@ -141,6 +141,10 @@ Dependency-free scripts, plus skills that teach the agent when to run them:
 - `scripts/sync-instructions.sh` — installs the user-global operator contract as
   `$DSH_HOME/AGENTS.md`, so a fresh session in any project starts in operator mode. Backs up a
   differing existing file before replacing it.
+- `scripts/sync-claude.sh` — installs the Claude Code user config from `claude/`
+  (`CLAUDE.md`, `settings.json`, the stop-gate hook) plus the skills named in
+  `claude/skills.txt` into `~/.claude`. `--check` reports drift, so edits made live (for
+  example through `/config`) get copied back here instead of dying with the disk.
 - `scripts/wt.sh` — one git worktree per task, beside the repo, with the gate run on finish.
 - `scripts/consult-codex.sh` — one-shot second opinion from OpenAI Codex
   (`codex exec … --json`, read-only): a diff review, a claim check, or a GPT-family answer on

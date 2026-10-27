@@ -1,6 +1,6 @@
 ---
 name: consult-codex
-description: Ask OpenAI Codex (gpt-6.1-sol) for one independent second opinion from a DSH session — adversarial review of a working diff, verification of a risky claim, or a GPT-family answer when the primary route is down. Use when the owner says "consult Codex", "second opinion", "review this with Codex", "have Codex check it", or before claiming high-risk work done. Read-only, one-shot, separate ChatGPT quota.
+description: Ask OpenAI Codex (gpt-6.1-sol) for one independent second opinion from a DSH or Claude Code session — adversarial review of a working diff, verification of a risky claim, or a GPT-family answer when the primary route is down. Use when the owner says "consult Codex", "second opinion", "review this with Codex", "have Codex check it", or before claiming high-risk work done. Read-only, one-shot, separate ChatGPT quota.
 ---
 
 # Consult Codex
@@ -20,7 +20,7 @@ in this setup and never edits the repo.
 
 ## When not to use
 
-- Implementation work — Codex is read-only here and the DSH agent should make edits.
+- Implementation work — Codex is read-only here and the primary agent should make edits.
 - Anything secret-bearing. The prompt and diff leave this machine to OpenAI. Never
   pass `.env`, credential files, tokens, or a diff that contains them. Check
   `git status`/`git diff --stat` first.

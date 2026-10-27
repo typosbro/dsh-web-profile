@@ -56,6 +56,9 @@ say "skills"
 say "instructions"
 "$REPO_DIR/scripts/sync-instructions.sh"
 
+say "claude code"
+"$REPO_DIR/scripts/sync-claude.sh"
+
 say "paths"
 python3 - "$DSH_HOME" "$NODE_BIN" "$CACHE_DIR" "$DSH_HOME/plugins" <<'PY'
 import pathlib, sys
