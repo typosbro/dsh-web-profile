@@ -28,6 +28,13 @@ const SPEAK_URL = '/voice-mode/speak';
 const STT_RATE = 16000;
 /** Capture frame size; 4096 frames at 48 kHz is ~85 ms per VAD step. */
 const CAPTURE_FRAME = 4096;
+/** Quiet time that ends an utterance. Natural thinking pauses run 1-2 s, and a
+ *  0.7 s cut split one thought into several short prompts, each answered
+ *  separately; 1.4 s keeps the thought whole. */
+const END_SILENCE_MS = 1400;
+/** A fragment that lands right after a prompt is a continuation, not a new
+ *  request: steer it into the turn instead of starting another short turn. */
+const CONTINUATION_WINDOW_MS = 4500;
 /** VAD thresholds: quiet room, then a raised pair while our own speaker is live. */
 const VAD_IDLE = { startThreshold: 0.022, continueThreshold: 0.011 };
 const VAD_PLAYING = { startThreshold: 0.06, continueThreshold: 0.03 };
@@ -183,6 +190,7 @@ function createVoiceController(options) {
   const speakControllers = new Set();
   const liveSources = new Set();
   let engineTts = 'unknown';
+  let lastSubmitAt = 0;
 
   const post = (patch) => publish(patch);
   const t = (key) => String(getT()(key));
@@ -558,8 +566,12 @@ function createVoiceController(options) {
       fail(t('composer'));
       return;
     }
-    diag({ prompt: 'writing', lastPrompt: text.slice(0, 160) });
-    if (props.running) {
+    const continuation = Date.now() - lastSubmitAt < CONTINUATION_WINDOW_MS;
+    const mode = continuation ? 'steer' : 'queue';
+    lastSubmitAt = Date.now();
+    diag({ prompt: 'writing', lastPrompt: text.slice(0, 160), promptMode: mode });
+    // A continuation joins the open turn; only a genuinely new request cancels it.
+    if (props.running && !continuation) {
       try {
         await remote.session.cancel({ sessionId: props.sessionId });
       } catch (error) {
@@ -570,7 +582,7 @@ function createVoiceController(options) {
       const result = await remote.session.prompt({
         requestId: voiceRequestId(),
         sessionId: props.sessionId,
-        mode: 'queue',
+        mode,
         content: [{ type: 'text', text }],
         clientTimeZone: voiceTimeZone(),
       });
@@ -709,7 +721,13 @@ function createVoiceController(options) {
       inputContext = new AudioCtor();
       if (typeof inputContext.resume === 'function') await inputContext.resume();
       captureRate = inputContext.sampleRate || 48000;
-      vad = createVad({ sampleRate: captureRate });
+      vad = createVad({
+        sampleRate: captureRate,
+        endSilenceMs: END_SILENCE_MS,
+        startMs: 150,
+        minSpeechMs: 250,
+        preRollMs: 300,
+      });
       sourceNode = inputContext.createMediaStreamSource(stream);
       processorNode = inputContext.createScriptProcessor(CAPTURE_FRAME, 1, 1);
       processorNode.onaudioprocess = onAudioProcess;
@@ -746,6 +764,8 @@ function createVoiceController(options) {
       mode: 'on',
       capture: 'starting',
       vad: 'idle',
+      endSilenceMs: END_SILENCE_MS,
+      continuationWindowMs: CONTINUATION_WINDOW_MS,
       follow: 'idle',
       transcribe: 'idle',
       speak: 'idle',

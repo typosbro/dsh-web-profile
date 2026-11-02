@@ -19,6 +19,7 @@
  * bodies before reading them into memory.
  */
 
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 
 import { VoiceEngineError, createTtsEngine } from './lib/tts.js';
@@ -35,11 +36,14 @@ import { encodeWav16, validatePcm16Wav } from './lib/wav.js';
 export const name = 'voice-mode';
 
 /** Required services: loopback Web routes, the trust gate, and local transcription. */
-export const inject = ['webServer', 'connection', 'speechToText'];
+export const inject = ['webServer', 'connection', 'speechToText', 'sessionController'];
 
 const STATUS_PATH = '/voice-mode/status';
 const TRANSCRIBE_PATH = '/voice-mode/transcribe';
 const SPEAK_PATH = '/voice-mode/speak';
+
+/** One voice turn: prompt a dedicated DSH session and collect its answer text. */
+const TURN_PATH = '/voice-mode/turn';
 
 /** Largest `/voice-mode/speak` JSON body admitted, bytes. */
 const MAX_SPEAK_BODY_BYTES = 64 * 1024;
@@ -578,6 +582,114 @@ export function apply(ctx, config) {
     res.end(Buffer.from(wav.buffer, wav.byteOffset, wav.byteLength));
   };
 
+  /** Extract plain text from one durable assistant message event payload. */
+  const assistantText = (data) => {
+    const message = data && typeof data === 'object' ? data.message : undefined;
+    if (!message || !Array.isArray(message.content)) return '';
+    const parts = [];
+    for (const block of message.content) {
+      if (block && block.type === 'text' && typeof block.text === 'string' && block.text.trim() !== '') {
+        parts.push(block.text);
+      }
+    }
+    return parts.join('\n');
+  };
+
+  /** In-flight collection per session; one turn at a time per session. */
+  const pendingTurns = new Map();
+  /** Session dedicated to voice conversations; created on first use. */
+  let voiceSessionId;
+
+  ctx.on('session/event', (session, event) => {
+    let key;
+    try {
+      key = String(session?.id ?? '');
+    } catch (error) {
+      return;
+    }
+    if (key === '') return;
+    const collector = pendingTurns.get(key);
+    if (collector === undefined || event === undefined || event === null) return;
+    if (event.type === 'assistant/message') {
+      const text = assistantText(event.data);
+      if (text !== '') collector.parts.push(text);
+    } else if (event.type === 'turn/end') {
+      collector.finish('complete');
+    }
+  });
+
+  /**
+   * POST /voice-mode/turn — {"text"} -> {"text","sessionId"}.
+   *
+   * Prompts one dedicated Session and waits for its turn to end, returning the
+   * assistant text collected from the durable event stream. The voice bridge
+   * feeds this text to the same local TTS the browser uses.
+   */
+  const turnRoute = async (req, res) => {
+    if (req.method !== 'POST') {
+      methodNotAllowed(res, ['POST']);
+      return;
+    }
+    let payload;
+    try {
+      payload = JSON.parse(await readTextBody(req, 64 * 1024));
+    } catch (error) {
+      sendJson(res, 400, { error: 'bad-request', detail: 'body must be JSON' });
+      return;
+    }
+    const text = payload && typeof payload.text === 'string' ? payload.text.trim() : '';
+    if (text === '') {
+      sendJson(res, 400, { error: 'empty-text' });
+      return;
+    }
+    const controller = ctx.sessionController;
+    try {
+      if (voiceSessionId === undefined) {
+        const created = await controller.create({ cwd: homedir() });
+        voiceSessionId = created.sessionId;
+      }
+      const sessionId = voiceSessionId;
+      const answer = await new Promise((resolve) => {
+        const parts = [];
+        let settled = false;
+        const collector = {
+          parts,
+          finish(reason) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (pendingTurns.get(String(sessionId)) === collector) pendingTurns.delete(String(sessionId));
+            resolve({ parts, reason });
+          },
+        };
+        const timer = setTimeout(() => collector.finish('timeout'), 180_000);
+        pendingTurns.set(String(sessionId), collector);
+        void controller
+          .prompt(
+            {
+              requestId: randomUUID(),
+              sessionId,
+              mode: 'queue',
+              content: [{ type: 'text', text }],
+              clientTimeZone: 'Asia/Seoul',
+            },
+            new AbortController().signal,
+          )
+          .catch((error) => {
+            collector.finish(`failed: ${sanitizeDetail(error)}`);
+          });
+      });
+      sendJson(res, 200, {
+        ok: true,
+        sessionId,
+        reason: answer.reason,
+        text: answer.parts.join('\n\n').trim(),
+      });
+    } catch (error) {
+      sendJson(res, 503, { error: 'turn-failed', detail: sanitizeDetail(error) });
+    }
+  };
+
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: STATUS_PATH,
@@ -596,6 +708,12 @@ export function apply(ctx, config) {
     handler: wrap('POST /voice-mode/speak', speakRoute),
   }), `voice-mode: POST ${SPEAK_PATH}`);
 
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact',
+    path: TURN_PATH,
+    handler: wrap('POST /voice-mode/turn', turnRoute),
+  }), `voice-mode: POST ${TURN_PATH}`);
+
   ctx.effect(() => () => {
     try {
       tts.dispose?.();
@@ -604,7 +722,7 @@ export function apply(ctx, config) {
     }
   }, 'voice-mode.dispose');
 
-  ctx.logger?.info?.(`voice-mode: local voice routes mounted (${STATUS_PATH}, ${TRANSCRIBE_PATH}, ${SPEAK_PATH})`);
+  ctx.logger?.info?.(`voice-mode: local voice routes mounted (${STATUS_PATH}, ${TRANSCRIBE_PATH}, ${SPEAK_PATH}, ${TURN_PATH})`);
 }
 
 export default { name, inject, apply };
