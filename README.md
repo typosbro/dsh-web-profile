@@ -67,7 +67,7 @@ Verify any install with `./doctor.sh`.
 | Browser stack | pinned `@playwright/mcp` 0.0.83, headless Chrome, CDP side-channel for the pane | `plugins/playwright-browser/`, `plugins/browser-pane/`, `plugins/browser-live/` |
 | Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `profiles/web/gate/` |
 | Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
-| Voice mode | talk to the agent continuously: pause ends an utterance and sends it, the streamed reply is spoken, speaking over it stops the speech and cancels the turn | `plugins/voice-mode/` |
+| Voice mode | talk to the agent continuously, **fully local**: local SenseVoice speech-to-text in, local Kokoro (or macOS `say`) text-to-speech out, pause sends, speaking over the reply stops it and cancels the turn | `plugins/voice-mode/` |
 | Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
 | Agent presets | `orchestrator` (acts first, escalates decisions, chooses team vs subagent vs workflow) and `worker` (lean child: no delegation, no web, no schedule, no deploy) | `presets/orchestrator/`, `presets/worker/` |
 | Operator mode | every new session, in every project, loads the act-first contract: ship a reversible change or ask for one owner decision; report FIXED versus NEEDS YOUR DECISION, never a status page | `agent-kit`: `instructions/AGENTS.md` → `$DSH_HOME/AGENTS.md`; `skills/operator/` |

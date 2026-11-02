@@ -1,15 +1,15 @@
 {
-  "start": "Start voice conversation",
+  "start": "Start voice conversation (local)",
   "stop": "Stop voice conversation",
   "listening": "Listening",
   "hearing": "Hearing you",
   "thinking": "Thinking",
   "speaking": "Speaking — talk to interrupt",
   "insecure": "Voice mode needs HTTPS or localhost",
-  "unavailable": "This browser has no speech recognition (use Chrome or Edge)",
-  "permission": "Microphone permission denied",
-  "network": "Speech recognition needs a network connection",
+  "microphone": "Microphone unavailable — check the permission",
+  "engine": "Local voice engine is not ready",
+  "sttFailed": "Could not transcribe the utterance",
+  "speakFailed": "Could not speak the reply",
   "composer": "The message composer is not ready",
-  "promptFailed": "Could not send the message",
-  "caption": "You: {{text}}"
+  "promptFailed": "Could not send the message"
 }

@@ -51,6 +51,11 @@ Options:
   --baseline <path>      subtract error signatures from a previous JSON report
   --expect-voice         accept-gate mode: require ${MARKER} and [${DOCK_ATTR}] and composer
   --strict               fail on any non-noise console/log error as well
+  --engine-probe         after the mount check, run the local-voice engine +
+                         capture probe: GET /voice-mode/status, POST
+                         /voice-mode/speak + Web Audio decode, suppressPrompts,
+                         one mic click, read 0.2.0 diagnostics, click stop
+  --engine-json-out <p>  write the engine-probe subtree to this JSON path
   --voice-loop-probe     after the mount check, click the composer mic once via
                          CDP, wait 5 s, read __DSH_VOICE_MODE__ diagnostics and
                          the dock state, screenshot, click again to stop, verify
@@ -71,6 +76,8 @@ function parseArgs(argv) {
     expectVoice: false,
     strict: false,
     voiceLoopProbe: false,
+    engineProbe: false,
+    engineJsonOut: null,
     port: 0,
     keepChrome: false,
     debug: false,
@@ -93,6 +100,8 @@ function parseArgs(argv) {
       case '--expect-voice': opts.expectVoice = true; break;
       case '--strict': opts.strict = true; break;
       case '--voice-loop-probe': opts.voiceLoopProbe = true; break;
+      case '--engine-probe': opts.engineProbe = true; break;
+      case '--engine-json-out': opts.engineJsonOut = take(i, a); i++; break;
       case '--keep-chrome': opts.keepChrome = true; break;
       case '--debug': opts.debug = true; break;
       case '--help': case '-h': opts.help = true; break;
@@ -580,6 +589,16 @@ const VOICE_STATE_EXPR = `(() => {
     frames: Array.isArray(m.frames) ? m.frames.length : (typeof m.frames === 'number' ? m.frames : null),
     prompt: m.prompt === undefined ? null : m.prompt,
     turns: m.turns === undefined ? null : m.turns,
+    capture: m.capture === undefined ? null : m.capture,
+    captureError: m.captureError === undefined ? null : m.captureError,
+    engine: m.engine === undefined ? null : m.engine,
+    ttsReady: m.ttsReady === undefined ? null : m.ttsReady,
+    sttReady: m.sttReady === undefined ? null : m.sttReady,
+    vad: m.vad === undefined ? null : m.vad,
+    transcribe: m.transcribe === undefined ? null : m.transcribe,
+    transcribeError: m.transcribeError === undefined ? null : m.transcribeError,
+    suppressPrompts: m.suppressPrompts === undefined ? null : m.suppressPrompts,
+    note: m.note === undefined ? null : m.note,
   }), null) : null;
   const nodes = safe(() => Array.from(document.querySelectorAll('[${DOCK_ATTR}]')).map((el) => ({
     value: el.getAttribute('${DOCK_ATTR}'),
@@ -767,6 +786,200 @@ async function runVoiceLoopProbe(cdp, collector, opts, debug) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Local-voice engine + capture probe (v0.2.0: host-local STT/TTS)      */
+/* ------------------------------------------------------------------ */
+
+const ENGINE_STATUS_EXPR = `(async () => {
+  try {
+    const r = await fetch('/voice-mode/status', { cache: 'no-store' });
+    const body = await r.json().catch(() => null);
+    return { httpStatus: r.status, ok: r.ok, body };
+  } catch (e) {
+    return { httpStatus: null, ok: false, error: String((e && e.message) || e) };
+  }
+})()`;
+
+const ENGINE_SPEAK_EXPR = `(async () => {
+  const out = { httpStatus: null, ok: false, bytes: 0, decoded: null, decodeError: null };
+  try {
+    const r = await fetch('/voice-mode/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Local speech probe.' }),
+    });
+    out.httpStatus = r.status;
+    out.ok = r.ok;
+    out.contentType = r.headers.get('content-type');
+    const b = await r.arrayBuffer();
+    out.bytes = b.byteLength;
+    const ac = new AudioContext();
+    try {
+      const buf = await ac.decodeAudioData(b);
+      out.decoded = { seconds: Math.round(buf.duration * 1000) / 1000, sampleRate: buf.sampleRate, channels: buf.numberOfChannels, frames: buf.length };
+    } catch (e) {
+      out.decodeError = String((e && e.message) || e);
+    }
+    try { await ac.close(); } catch (e) { /* already closed */ }
+  } catch (e) {
+    out.error = String((e && e.message) || e);
+  }
+  return out;
+})()`;
+
+const SUPPRESS_PROMPTS_EXPR = `(() => {
+  const m = window.${MARKER};
+  if (!m || typeof m !== 'object') return { set: false, reason: 'marker missing' };
+  try {
+    m.suppressPrompts = true;
+    return { set: true, suppressPrompts: m.suppressPrompts };
+  } catch (e) {
+    return { set: false, error: String((e && e.message) || e) };
+  }
+})()`;
+
+/**
+ * Local-voice gate for plugin v0.2.0: prove the host-local engine routes are
+ * reachable from the page, the browser can decode host-synthesized WAVs, and the
+ * mic toggle drives capture/VAD while prompt submission is hard-suppressed (so
+ * fake headless audio can never pollute the session). Clicks the mic once, waits
+ * 4 s, reads diagnostics, screenshots, clicks again, then verifies clean stop.
+ */
+async function runLocalEngineProbe(cdp, collector, opts, debug) {
+  const result = {
+    enabled: true,
+    blocker: null,
+    safetyStop: false,
+    safetyStopDetail: null,
+    status: null,
+    speak: null,
+    suppress: null,
+    before: null,
+    button: null,
+    clicked: null,
+    afterClick: null,
+    clickedStop: null,
+    stopped: null,
+    conversation: null,
+    newErrors: { uncaught: [], console: [], log: [] },
+    screenshot: null,
+  };
+  const errSnapshot = () => ({
+    uncaught: collector.uncaught.length,
+    console: collector.console.length,
+    log: collector.log.length,
+  });
+  const errorsBefore = errSnapshot();
+
+  debug && process.stderr.write('[engine-probe] GET /voice-mode/status\n');
+  result.status = await evalJson(cdp, ENGINE_STATUS_EXPR, 20000);
+
+  debug && process.stderr.write('[engine-probe] POST /voice-mode/speak + Web Audio decode\n');
+  result.speak = await evalJson(cdp, ENGINE_SPEAK_EXPR, 30000);
+
+  result.before = await evalJson(cdp, VOICE_STATE_EXPR);
+  const button = await evalJson(
+    cdp,
+    `(() => {
+      const btn = document.querySelector('[${DOCK_ATTR}="button"]');
+      if (!btn) return null;
+      const r = btn.getBoundingClientRect();
+      const control = btn.closest('[${DOCK_ATTR}="control"]');
+      return {
+        aria: btn.getAttribute('aria-label'),
+        title: btn.getAttribute('title'),
+        pressed: btn.getAttribute('aria-pressed'),
+        controlState: control ? control.getAttribute('data-state') : null,
+        visible: !!(r.width && r.height),
+      };
+    })()`,
+  );
+  result.button = button;
+  if (!button) {
+    result.blocker = 'mic button [data-dsh-voice-mode="button"] not found in the composer dock';
+    return result;
+  }
+
+  debug && process.stderr.write('[engine-probe] setting suppressPrompts safety hook\n');
+  result.suppress = await evalJson(cdp, SUPPRESS_PROMPTS_EXPR);
+
+  debug && process.stderr.write('[engine-probe] clicking mic ON\n');
+  result.clicked = await evalJson(cdp, CLICK_MIC_EXPR);
+  if (!result.clicked?.clicked) {
+    result.blocker = `click dispatched but failed: ${result.clicked?.reason ?? 'unknown'}`;
+    return result;
+  }
+
+  await sleep(4000);
+  result.afterClick = await evalJson(cdp, VOICE_STATE_EXPR);
+
+  // Safety gate: suppressPrompts must prevent any transcript from being sent.
+  const prompt = result.afterClick?.marker?.prompt ?? null;
+  const promptAccepted = prompt === 'accepted';
+  const beforeCounts = result.before?.userCounts ?? {};
+  const afterCounts = result.afterClick?.userCounts ?? {};
+  const userCountIncreased = Object.keys(beforeCounts).some((k) => (afterCounts[k] ?? 0) > (beforeCounts[k] ?? 0));
+  const composerChanged = (result.before?.composerInputText ?? '') !== (result.afterClick?.composerInputText ?? '');
+  result.safetyStop = promptAccepted || userCountIncreased || composerChanged;
+  if (result.safetyStop) {
+    result.safetyStopDetail = {
+      promptAccepted,
+      userCountIncreased,
+      composerChanged,
+      prompt,
+      userCountsBefore: beforeCounts,
+      userCountsAfter: afterCounts,
+      composerInputBefore: result.before?.composerInputText ?? null,
+      composerInputAfter: result.afterClick?.composerInputText ?? null,
+    };
+    debug && process.stderr.write(`[engine-probe] SAFETY STOP: ${JSON.stringify(result.safetyStopDetail)}\n`);
+  }
+
+  // ON-state screenshot.
+  try {
+    if (opts.screenshot) {
+      const shot = await cdp.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, 20000);
+      writeFileSync(opts.screenshot, Buffer.from(shot.data, 'base64'));
+      result.screenshot = { path: opts.screenshot, bytes: statSync(opts.screenshot).size };
+    }
+  } catch (err) {
+    result.screenshotError = err.message;
+  }
+
+  debug && process.stderr.write('[engine-probe] clicking mic OFF\n');
+  result.clickedStop = await evalJson(cdp, CLICK_MIC_EXPR);
+  await sleep(1000);
+  result.stopped = await evalJson(cdp, VOICE_STATE_EXPR);
+
+  result.conversation = {
+    changed: !!(userCountIncreased || composerChanged),
+    userCountsBefore: beforeCounts,
+    userCountsAfter: result.stopped?.userCounts ?? afterCounts,
+    composerInputBefore: result.before?.composerInputText ?? null,
+    composerInputAfter: result.stopped?.composerInputText ?? null,
+    conversationTextLenBefore: result.before?.conversationTextLen ?? null,
+    conversationTextLenAfter: result.stopped?.conversationTextLen ?? null,
+  };
+
+  const errorsAfter = errSnapshot();
+  const sliceNew = (kind) => collector[kind].slice(errorsBefore[kind]).map((e) => String(e.description ?? e.text ?? '').slice(0, 500));
+  result.newErrors = {
+    uncaught: sliceNew('uncaught'),
+    console: sliceNew('console'),
+    log: sliceNew('log'),
+  };
+
+  // Blockers: host engine unreachable / speak not playable / click failed.
+  if (result.status?.body?.ok !== true) {
+    result.blocker = `GET /voice-mode/status not ok (http=${result.status?.httpStatus ?? 'n/a'}, error=${result.status?.body?.error ?? result.status?.error ?? 'unknown'})`;
+  } else if (!(result.speak?.ok && result.speak?.decoded)) {
+    result.blocker = `POST /voice-mode/speak not playable (http=${result.speak?.httpStatus ?? 'n/a'}, bytes=${result.speak?.bytes ?? 0}, decodeError=${result.speak?.decodeError ?? result.speak?.error ?? 'n/a'})`;
+  } else if (!result.clickedStop?.clicked) {
+    result.blocker = `stop click failed: ${result.clickedStop?.reason ?? 'unknown'}`;
+  }
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
 /* Error collection + noise classification                             */
 /* ------------------------------------------------------------------ */
 
@@ -901,12 +1114,16 @@ function classify(entries, kind) {
 }
 
 function finalize(report, opts, exitCode) {
-  if (opts?.jsonOut) {
+  const writeJson = (path, value, kind) => {
     try {
-      writeFileSync(opts.jsonOut, JSON.stringify(report, null, 2) + '\n');
+      writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
     } catch (err) {
-      report.warnings.push({ kind: 'json-out-failed', category: 'harness', text: err.message, url: '', count: 1 });
+      report.warnings.push({ kind, category: 'harness', text: err.message, url: '', count: 1 });
     }
+  };
+  if (opts?.jsonOut) writeJson(opts.jsonOut, report, 'json-out-failed');
+  if (opts?.engineJsonOut && report.engineProbe) {
+    writeJson(opts.engineJsonOut, report.engineProbe, 'engine-json-out-failed');
   }
   return { report, exitCode };
 }
@@ -1049,7 +1266,15 @@ async function main() {
     // Optional functional probe: click the composer mic once, read the plugin's
     // runtime diagnostics, stop it again. Never types or sends anything.
     let clickProbe = null;
-    if (opts.voiceLoopProbe) {
+    let engineProbe = null;
+    const onScreenProbe = opts.engineProbe || opts.voiceLoopProbe;
+    if (opts.engineProbe) {
+      if (target.id) {
+        await cdp.send('Target.activateTarget', { targetId: target.id }).catch(() => {});
+      }
+      engineProbe = await runLocalEngineProbe(cdp, collector, opts, opts.debug);
+      report.engineProbe = engineProbe;
+    } else if (opts.voiceLoopProbe) {
       if (target.id) {
         await cdp.send('Target.activateTarget', { targetId: target.id }).catch(() => {});
       }
@@ -1057,9 +1282,9 @@ async function main() {
       report.clickProbe = clickProbe;
     }
 
-    // Screenshot after probes are done (for the voice-loop probe the ON-state
-    // screenshot is already captured by the probe itself).
-    if (!opts.voiceLoopProbe) {
+    // Screenshot after probes are done (an on-screen probe captures its own
+    // ON-state screenshot, so the generic post-probe shot is skipped).
+    if (!onScreenProbe) {
       try {
         if (target.id) {
           await cdp.send('Target.activateTarget', { targetId: target.id }).catch(() => {});
@@ -1071,6 +1296,8 @@ async function main() {
       } catch (err) {
         report.warnings.push({ kind: 'screenshot-failed', category: 'harness', text: err.message, url: '', count: 1 });
       }
+    } else if (engineProbe?.screenshot) {
+      report.screenshot = engineProbe.screenshot;
     } else if (clickProbe?.screenshot) {
       report.screenshot = clickProbe.screenshot;
     }
@@ -1127,6 +1354,44 @@ async function main() {
       newConsoleErrors: newConsole.length,
       newLogErrors: newLog.length,
     };
+    if (engineProbe) {
+      const st = engineProbe.status?.body ?? {};
+      const sp = engineProbe.speak ?? {};
+      report.checks.localEngine = {
+        statusHttp: engineProbe.status?.httpStatus ?? null,
+        statusOk: st.ok === undefined ? null : st.ok,
+        sttReady: st.stt?.ready === undefined ? null : st.stt.ready,
+        sttProvider: st.stt?.provider ?? st.stt?.engine ?? null,
+        ttsReady: st.tts?.ready === undefined ? null : st.tts.ready,
+        ttsEngine: st.tts?.engine ?? st.tts?.provider ?? null,
+        ttsSampleRate: st.tts?.sampleRate ?? st.tts?.sample_rate ?? null,
+        speakHttp: sp.httpStatus ?? null,
+        speakOk: sp.ok ?? false,
+        speakBytes: sp.bytes ?? 0,
+        speakSeconds: sp.decoded?.seconds ?? null,
+        speakSampleRate: sp.decoded?.sampleRate ?? null,
+        speakDecodeError: sp.decodeError ?? sp.error ?? null,
+        suppressPromptsSet: engineProbe.suppress?.set ?? false,
+        modeOn: engineProbe.afterClick?.marker?.mode ?? null,
+        captureOn: engineProbe.afterClick?.marker?.capture ?? null,
+        captureError: engineProbe.afterClick?.marker?.captureError ?? null,
+        engineOn: engineProbe.afterClick?.marker?.engine ?? null,
+        ttsReadyOn: engineProbe.afterClick?.marker?.ttsReady ?? null,
+        sttReadyOn: engineProbe.afterClick?.marker?.sttReady ?? null,
+        followOn: engineProbe.afterClick?.marker?.follow ?? null,
+        vadOn: engineProbe.afterClick?.marker?.vad ?? null,
+        transcribeOn: engineProbe.afterClick?.marker?.transcribe ?? null,
+        promptOn: engineProbe.afterClick?.marker?.prompt ?? null,
+        controlStateOn: engineProbe.afterClick?.controlState ?? null,
+        modeOff: engineProbe.stopped?.marker?.mode ?? null,
+        captureOff: engineProbe.stopped?.marker?.capture ?? null,
+        controlStateOff: engineProbe.stopped?.controlState ?? null,
+        conversationChanged: engineProbe.conversation?.changed ?? null,
+        newUncaught: engineProbe.newErrors?.uncaught?.length ?? 0,
+        newConsole: engineProbe.newErrors?.console?.length ?? 0,
+        newLog: engineProbe.newErrors?.log?.length ?? 0,
+      };
+    }
     if (clickProbe) {
       report.checks.voiceLoop = {
         clicked: !!clickProbe.clicked?.clicked,
@@ -1168,6 +1433,15 @@ async function main() {
       if (clickProbe.blocker) report.failures.push(`voice-loop probe blocker: ${clickProbe.blocker}`);
       if (clickProbe.safetyStop) {
         report.failures.push(`voice-loop probe safety stop: ${JSON.stringify(clickProbe.safetyStopDetail)}`);
+      }
+    }
+    if (opts.engineProbe && engineProbe) {
+      if (engineProbe.blocker) report.failures.push(`engine probe blocker: ${engineProbe.blocker}`);
+      if (engineProbe.safetyStop) {
+        report.failures.push(`engine probe safety stop: ${JSON.stringify(engineProbe.safetyStopDetail)}`);
+      }
+      if (engineProbe.conversation?.changed) {
+        report.failures.push('engine probe: conversation changed (a transcript leaked past suppressPrompts)');
       }
     }
 

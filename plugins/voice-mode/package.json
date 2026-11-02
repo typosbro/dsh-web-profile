@@ -1,8 +1,8 @@
 {
   "name": "@local/voice-mode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Continuous voice conversation for the dsh Web GUI: speech in submits the prompt, the streamed reply is spoken, speaking over it interrupts",
+  "description": "Continuous, fully local voice conversation for the dsh Web GUI: local SenseVoice STT, local Kokoro TTS, barge-in interruption",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,13 +12,16 @@
     "./icon": "./icon.svg"
   },
   "files": [
-    "index.js",
+    "README.md",
     "client.js",
     "cordis.patch.yml",
     "icon.svg",
+    "index.js",
+    "lib",
     "locale/en.json",
     "locale/ko.json",
-    "README.md"
+    "scripts",
+    "tools"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -37,5 +40,8 @@
       ]
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "sherpa-onnx-node": "1.13.8"
+  }
 }

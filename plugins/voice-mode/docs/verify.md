@@ -397,6 +397,79 @@ list, so the transport call throws and the loop never reaches `follow:"open"`.
 No change was made to plugin source (out of scope). Re-run the command above
 after the plugin fix; pass requires `follow:"open"` and zero new errors.
 
+## Local-voice gate v0.2.0 (host-local STT/TTS) — PASS
+
+`@local/voice-mode@0.2.0` removes Web Speech / `speechSynthesis`: capture is
+`getUserMedia` + a local VAD in the page, STT/TTS run on the host and are reached
+through host routes (`GET /voice-mode/status`, `POST /voice-mode/transcribe`,
+`POST /voice-mode/speak`), and playback is Web Audio. Served client artifact
+`rev=3cf0180576fc`. Two runs against the live GUI (`http://127.0.0.1:3080/`,
+fresh headless boot, active session):
+
+### Run 1 — mount/error gate (PASS)
+
+```bash
+node tools/cdp-check.mjs --expect-voice --baseline /tmp/voice-mode-baseline.json \
+  --screenshot /tmp/voice-mode-local.png --json-out /tmp/voice-mode-local.json
+# exit 0
+```
+
+`ok:true`, marker `{plugin:"@local/voice-mode", version:"0.2.0"}`, docks `2`
+(inside composer `2`), `voiceBundleInScript:true`, new uncaught/console/log
+errors `0/0/0`, taskbar button `title="Start voice conversation (local)"`,
+`data-state="off"`. Screenshot `/tmp/voice-mode-local.png`.
+
+### Run 2 — local engine + capture probe (PASS)
+
+```bash
+node tools/cdp-check.mjs --expect-voice --engine-probe \
+  --engine-json-out /tmp/voice-mode-engine-probe.json \
+  --baseline /tmp/voice-mode-baseline.json \
+  --screenshot /tmp/voice-mode-local-engine.png \
+  --json-out /tmp/voice-mode-local-run2.json
+# exit 0
+```
+
+(a) In-page `fetch('/voice-mode/status')`: HTTP 200, `ok:true`,
+`stt.ready:true`, `stt.provider:"sensevoice"`, `stt.location:"host-local"`,
+`tts.ready:true`, `tts.engine:"kokoro"`, `tts.sampleRate:24000`,
+`tts.speakerCount:54`, kokoro `available:true` / `modelPresent:true`
+(`modelBytes:114202993`), `onnxruntime 1.28.2`.
+
+(b) In-page `POST /voice-mode/speak` (`{"text":"Local speech probe."}`) then
+`AudioContext.decodeAudioData`: HTTP 200, `audio/wav`, `bytes:61366`,
+decoded `seconds:1.278`, `channels:1`, `frames:56339`, no decode error.
+(`decodeAudioData` reports `sampleRate:44100` because Chrome resamples into the
+`AudioContext` rate; the host engine's native rate is the `24000` reported by
+`/status`.)
+
+(c) Safety hook: `window.__DSH_VOICE_MODE__.suppressPrompts = true` —
+`set:true`.
+
+(d) After ONE mic click + 4 s:
+
+```json
+{"plugin":"@local/voice-mode","version":"0.2.0","startedAt":…,
+ "suppressPrompts":true,"mode":"on","capture":"running","vad":"speech",
+ "follow":"open","transcribe":"idle","speak":"idle","prompt":"idle",
+ "bargeIn":false,"engine":"kokoro","ttsReady":true,
+ "followSessionId":"session-72abf235-…","frames":1}
+```
+
+Control `data-state="hearing"`, status span text `Hearing you`, button
+`aria-label="Stop voice conversation"`/`aria-pressed="true"` (green). The fake
+audio device drove the local VAD to `vad:"speech"`; with `suppressPrompts:true`
+no prompt was sent (`prompt:"idle"`, no transcript finalized inside 4 s).
+
+(e) After the stop click + 1 s: `mode:"off"`, `capture:"stopped"`,
+`vad:"idle"`, `follow:"closed"`, control `data-state="off"`, button back to
+`Start voice conversation (local)`.
+
+(f) New errors for the whole run: uncaught `0`, console `0`, log `0`. The
+conversation was unchanged: user-message counters `0→0`, composer text `""`,
+conversation text length `11406→11406`, `conversation.changed:false`. No typing,
+no Enter, no session changes.
+
 ## Re-running / troubleshooting
 
 ```bash

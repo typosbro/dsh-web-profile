@@ -1,51 +1,79 @@
 # voice-mode
 
-Continuous voice conversation for the dsh Web GUI. It turns the chat composer into
-a hands-free conversation surface instead of push-to-talk dictation:
+Continuous, **fully local** voice conversation for the dsh Web GUI. It replaces
+the record-button/dictation loop with a hands-free conversation:
 
-- **Talk, don't press.** One click starts the mode; speech recognition stays open,
-  a pause ends the utterance and it is sent as the next prompt automatically.
-- **It talks back.** The assistant's streamed reply is spoken sentence by sentence
-  as the tokens arrive, not after the whole turn finishes.
-- **Interrupt.** Speaking while it talks stops the speech immediately, cancels the
-  running turn, and takes the interruption as the next prompt — the same way you
-  cut off a person.
+- **Talk, don't press.** One click starts the mode; the microphone stays open and
+  a local voice-activity detector cuts utterances. A pause sends the utterance
+  as the next prompt.
+- **It talks back.** The assistant's streamed reply is spoken sentence by
+  sentence as the tokens arrive, not after the whole turn finishes.
+- **Interrupt.** Speaking while it talks stops the speech immediately (local
+  playback stop, no network round trip), cancels the running turn, and takes the
+  interruption as the next prompt — before the sentence has finished.
 
-Status lives in the composer dock: a microphone button plus a one-line status
-(`Listening`, `Hearing you`, `Thinking`, `Speaking — talk to interrupt`).
+Both speech engines run on the host this plugin is mounted in. Nothing goes to a
+cloud speech service:
+
+| Direction | Engine | Where |
+| --- | --- | --- |
+| Speech → text | harness `speechToText` / SenseVoice ONNX (int8) | host, already provisioned by `dsh-experimental-voice-input-bundle` |
+| Text → speech | Kokoro-82M int8 multi-lang via `sherpa-onnx-node` (natural neural TTS) | host, model in `~/.dsh/voice-mode/tts/` |
+| Fallback TTS | macOS `say` (local) for Hangul text and when Kokoro is unavailable | host |
+
+The browser only captures audio, runs the VAD, and plays returned WAV through Web
+Audio. That is what makes barge-in feel immediate: stopping playback is local and
+synchronous.
 
 ## Requirements
 
-- Chrome or Edge. Recognition uses the Web Speech API (`webkitSpeechRecognition`),
-  which those browsers implement; Safari and Firefox do not implement it the same
-  way and show `This browser has no speech recognition`.
-- A secure context: HTTPS or `localhost`. The tailnet HTTP URL does not count for
-  `getUserMedia`; use the relay HTTPS origin, or open the app on the machine itself.
-- Speech synthesis is the browser's local voice (`speechSynthesis`); it needs no
-  download and no key.
-- Speech recognition is the browser's service, so recognition itself needs network
-  access. Audio is not sent to the dsh Host; the transcript is.
+- Chrome or Edge on a secure origin (HTTPS or `localhost`); `getUserMedia` refuses
+  plain HTTP.
+- The host profile must have the voice-input bundle's local SenseVoice provider
+  ready (it already is on this machine). The plugin never falls back to a cloud
+  provider.
+- Kokoro model: ~132 MB, downloaded once into
+  `~/.dsh/voice-mode/tts/kokoro-int8-multi-lang-v1_0/` by
+  `node scripts/fetch-tts-model.mjs`. On this machine it is already installed.
+- `sherpa-onnx-node` (native, darwin-arm64) — a package dependency. The host half resolves it
+  from the profile's pnpm store when the linked plugin has no `node_modules` of its own;
+  running `pnpm install` in this directory also satisfies it.
 
 ## Install
 
-The bundle is installed with the harness plugin manager, which links the package
-into the active profile and selects it as a bundle:
+```bash
+cd ~/src/dsh-web-profile
+# the plugin manager links this directory into the active profile and selects it
+# as a bundle; the host row serves the routes, the client half is the mic control
+```
 
-- `plugin_manager` action `install_bundle`, target = absolute path of this directory.
-  The host row is a no-op (the feature is entirely browser-side). Result is
-  `application: "applied"` on a live profile; the page needs one refresh to load
-  the new client artifact (a fresh boot picks it up automatically).
-- A fresh `./bootstrap.sh` from the repo root installs it too, because
-  `profiles/web/package.json` links `@local/voice-mode` and lists it in
-  `dsh.profile.bundles`.
+A fresh `./bootstrap.sh` installs it too: `profiles/web/package.json` links
+`@local/voice-mode` and lists it in `dsh.profile.bundles`.
+
+Model fetch (idempotent, safe to re-run):
+
+```bash
+node scripts/fetch-tts-model.mjs
+```
 
 Rebuild the browser artifact after editing `src/`:
 
 ```bash
 node scripts/build.mjs      # writes client.js
 node --check client.js
-node --test                 # engine unit tests (51)
+node --test                 # engine + audio + host tests
+node tools/tts-check.mjs    # synthesizes test WAVs from the local engine
 ```
+
+## Routes (host half)
+
+| Route | Purpose |
+| --- | --- |
+| `GET /voice-mode/status` | engine readiness: STT provider, TTS engine, sample rate, speaker ids |
+| `POST /voice-mode/transcribe` | raw 16 kHz mono PCM16 WAV body → `{ text }`, local SenseVoice |
+| `POST /voice-mode/speak` | `{ text, sid?, speed? }` → `audio/wav`, Kokoro or `say` |
+
+All routes sit behind the harness connection gate.
 
 ## Use
 
@@ -54,37 +82,13 @@ node --test                 # engine unit tests (51)
 3. While it speaks, talk over it to interrupt.
 4. Click the microphone again to leave voice mode.
 
-## How it works
+## Limits
 
-| Concern | Mechanism |
-| --- | --- |
-| Speech in | `SpeechRecognition` continuous + interim results, auto-restart on `end` |
-| End of utterance | 650 ms quiet timer after the last result |
-| Prompt out | `remote.session.prompt({ mode: 'queue' })` with a client-minted `requestId` |
-| Reply text | `remote.session.follow({ assistantStream: true })` live `assistant-stream` frames (`text-delta` chunks) |
-| Speech out | `createSpeaker` → `speechSynthesis`, one utterance per sentence, lazily flushed |
-| Interrupt | stop the speaker, `remote.session.cancel`, keep the in-progress transcript |
-| Echo guard | `looksLikeEcho` compares the transcript against the sentence being spoken |
-
-## Files
-
-- `src/engine.mjs` — dependency-free engine: markdown-to-speech text, sentence
-  splitting, echo matching, voice choice, sequential TTS queue. Unit tests in
-  `test/engine.test.mjs` (`node --test test/`).
-- `src/app.js` — the Client half: controller state machine, follow-stream handling,
-  composer-dock React control.
-- `scripts/build.mjs` — concatenates the engine into the ModuleLoader factory and
-  writes `client.js` (the artifact the browser loads).
-- `index.js` — host half, intentionally empty: no host state, routes, or config.
-- `tools/cdp-check.mjs` — headless-Chrome smoke test for the live Web GUI.
-
-## Limits (first version)
-
-- One Session at a time: switching Sessions turns the mode off, because the
-  recognition session and the follow stream are bound to the Session they started on.
-- Recognition latency is the browser's, roughly a second after the pause; this is
-  not full-duplex streaming STT.
-- Barge-in relies on the browser's echo cancellation. On loud speakers it can
-  mistake its own voice for an interruption; headphones make it reliable.
-- The mode speaks every assistant reply in the Session while it is on, including
-  replies triggered from the keyboard.
+- One Session at a time: switching Sessions turns the mode off.
+- Turn-taking is endpointed, not full duplex: the agent starts after your ~0.7 s
+  pause, so overlapping speech mid-sentence is used for interruption rather than
+  streaming ASR.
+- Engine latency is the local models': SenseVoice ~0.3 s for a short utterance,
+  Kokoro ~0.5 s per sentence on this Mac. That is the price of staying local.
+- Barge-in trusts the browser's echo cancellation; on loud speakers raise the
+  playback thresholds in `src/app.js` or use headphones.

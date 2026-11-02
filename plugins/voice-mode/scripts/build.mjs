@@ -41,6 +41,7 @@ function indent(source, spaces) {
 }
 
 const engine = stripExports(await readFile(join(root, 'src/engine.mjs'), 'utf8'));
+const audio = stripExports(await readFile(join(root, 'src/audio.mjs'), 'utf8'));
 const app = stripExports(await readFile(join(root, 'src/app.js'), 'utf8'));
 
 const artifact = `/**
@@ -58,6 +59,8 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
 ${indent(engine, 4)}
+
+${indent(audio, 4)}
 
 ${indent(app, 4)}
   },

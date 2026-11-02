@@ -1,5 +1,5 @@
 /**
- * @local/voice-mode 0.1.0 — generated browser artifact, do not edit.
+ * @local/voice-mode 0.2.0 — generated browser artifact, do not edit.
  * Source: src/engine.mjs + src/app.js. Rebuild: `node scripts/build.mjs`.
  *
  * Browser Client halves are classic scripts: this file registers a lazy factory
@@ -697,68 +697,516 @@ window.__ModuleLoader__.load({
       };
     }
 
+    /* @local/voice-mode -- pure, dependency-free audio helpers for the local voice client.
+     *
+     * Build contract for scripts/build.mjs: this file is concatenated into the classic
+     * browser artifact after src/engine.mjs by removing the leading "export " token
+     * from exported declarations. Keep this file free of imports, "export default",
+     * "export { }", and top-level side effects. Every exported declaration starts its
+     * own line with "export ". Plain ES2020: it runs inside the ModuleLoader factory,
+     * and the Node unit tests import it directly as ESM.
+     *
+     * Capture path, entirely local:
+     *   getUserMedia -> AudioContext -> ScriptProcessor frame (Float32Array)
+     *     -> createVad().push(frame) -> 'ended' -> takeUtterance()
+     *     -> resampleLinear(samples, captureRate, 16000) -> encodeWav16(..., 16000)
+     *     -> POST /voice-mode/transcribe (host-local SenseVoice)
+     *
+     * The VAD is a pure state machine: no timers and no ambient clock. It derives
+     * milliseconds only from pushed frame lengths and sampleRate, so the caller can
+     * drive it from a ScriptProcessor/AudioWorklet callback at whatever rate the
+     * AudioContext runs at.
+     *
+     *   idle   --(startMs of sustained frames >= startThreshold)-->  speech
+     *   speech --(endSilenceMs of frames < continueThreshold)-->      ended
+     *   speech --(maxUtteranceMs of speech, forced)-->                ended
+     *   ended  --(next push, or reset())-->                           idle
+     *
+     * push() returns the new state on the transition push and the current state
+     * otherwise, so one utterance reports 'ended' exactly once. The frame after an
+     * 'ended' report re-arms the machine and is processed as the start of the next
+     * capture window (the client keeps pushing frames and never has to call
+     * reset()). takeUtterance() returns exactly the captured audio of the last
+     * utterance: preRollMs of audio before the speech onset is kept so the first
+     * word is not clipped, and trailing silence is trimmed to ~200 ms. An utterance
+     * with less than minSpeechMs of speech is still reported as 'ended' but is
+     * discarded (takeUtterance() returns an empty Float32Array), so a cough cannot
+     * become a transcription request.
+     *
+     * setThresholds({ startThreshold, continueThreshold }) retunes the two energy
+     * thresholds live, without touching the state, the speech/silence counters, or
+     * the captured utterance buffer. The client raises both while its own speaker
+     * is playing so speaker echo is not mistaken for a barge-in, and restores the
+     * quiet-room pair when playback stops. Either key may be omitted to keep the
+     * current value; non-positive, non-finite, or non-numeric values are ignored
+     * and thresholds are clamped into (0, 1].
+     */
+
+    /** AudioContexts normally run at 44.1 kHz or 48 kHz; this is only a fallback. */
+    const VOICE_MODE_AUDIO_DEFAULT_SAMPLE_RATE = 48000;
+
+    const VOICE_MODE_AUDIO_DEFAULT_START_THRESHOLD = 0.02;
+    const VOICE_MODE_AUDIO_DEFAULT_CONTINUE_THRESHOLD = 0.012;
+    const VOICE_MODE_AUDIO_DEFAULT_START_MS = 150;
+    const VOICE_MODE_AUDIO_DEFAULT_END_SILENCE_MS = 700;
+    const VOICE_MODE_AUDIO_DEFAULT_MIN_SPEECH_MS = 250;
+    const VOICE_MODE_AUDIO_DEFAULT_MAX_UTTERANCE_MS = 30000;
+    const VOICE_MODE_AUDIO_DEFAULT_PRE_ROLL_MS = 250;
+
+    /** Silence kept after the last speech frame when an utterance closes. */
+    const VOICE_MODE_AUDIO_TAIL_SILENCE_MS = 200;
+
+    /** Lower clamp for an energy threshold; anything below this is measurement noise. */
+    const VOICE_MODE_AUDIO_MIN_THRESHOLD = 1e-6;
+
+    /** Coerce an ArrayLike of samples to a Float32Array without mutating the caller's. */
+    function voiceModeAudioSamples(input) {
+      if (input instanceof Float32Array) return input;
+      if (input && typeof input.length === 'number' && Number.isFinite(input.length) && input.length >= 0) {
+        return Float32Array.from(input);
+      }
+      return new Float32Array(0);
+    }
+
+    /** A finite, strictly positive number, else the fallback. */
+    function voiceModeAudioPositive(value, fallback) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+      return value;
+    }
+
+    /** A finite, non-negative number, else the fallback. */
+    function voiceModeAudioNonNegative(value, fallback) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return fallback;
+      return value;
+    }
+
+    /** A usable energy threshold in (0, 1], else the fallback. */
+    function voiceModeAudioThreshold(value, fallback) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
+      return Math.min(1, Math.max(VOICE_MODE_AUDIO_MIN_THRESHOLD, value));
+    }
+
+    /** Root-mean-square energy of one frame; a cheap speech/silence discriminator. */
+    function voiceModeAudioRms(frame) {
+      if (frame.length === 0) return 0;
+      let sum = 0;
+      for (let i = 0; i < frame.length; i += 1) {
+        const value = frame[i];
+        sum += value * value;
+      }
+      return Math.sqrt(sum / frame.length);
+    }
+
     /**
-     * voice-mode — client half (Web GUI).
+     * Duration of one capture frame in milliseconds, derived from the AudioContext
+     * rate. `scriptProcessorSizeMs(48000, 4096)` is ~85.33 ms; useful for logging
+     * and for deriving VAD timing from a frame budget.
+     */
+    function scriptProcessorSizeMs(sampleRate, bufferSize) {
+      const rate = voiceModeAudioPositive(sampleRate, 0);
+      const frames = voiceModeAudioPositive(bufferSize, 0);
+      if (rate === 0 || frames === 0) return 0;
+      return (frames / rate) * 1000;
+    }
+
+    /**
+     * Linear-interpolation resampler, mono. Output length is exactly
+     * Math.round(input.length * toRate / fromRate) and output positions are
+     * monotonic (`source = i * fromRate / toRate`), so a 48 kHz capture becomes the
+     * 16 kHz mono stream the host transcribers expect. Equal rates return a copy;
+     * empty input returns an empty Float32Array.
+     */
+    function resampleLinear(input, fromRate, toRate) {
+      const samples = voiceModeAudioSamples(input);
+      const from = voiceModeAudioPositive(fromRate, 0);
+      const to = voiceModeAudioPositive(toRate, 0);
+      if (samples.length === 0) return new Float32Array(0);
+      if (from === 0 || to === 0) throw new RangeError('resampleLinear needs a positive fromRate and toRate');
+      if (from === to) return new Float32Array(samples);
+
+      const length = Math.round((samples.length * to) / from);
+      if (length === 0) return new Float32Array(0);
+
+      const output = new Float32Array(length);
+      const last = samples.length - 1;
+      const step = from / to; // source samples advanced per output sample
+      for (let i = 0; i < length; i += 1) {
+        const position = i * step;
+        const base = Math.floor(position);
+        if (base >= last) {
+          output[i] = samples[last];
+          continue;
+        }
+        const fraction = position - base;
+        output[i] =
+          fraction === 0 ? samples[base] : samples[base] + (samples[base + 1] - samples[base]) * fraction;
+      }
+      return output;
+    }
+
+    /**
+     * Float samples in [-1, 1] to signed 16-bit PCM. Values outside the range are
+     * clamped; negatives scale by 32768 and positives by 32767, matching the
+     * harness's own encodeWave so host decoders see the same amplitudes.
+     */
+    function float32ToPcm16(samples) {
+      const input = voiceModeAudioSamples(samples);
+      const output = new Int16Array(input.length);
+      for (let i = 0; i < input.length; i += 1) {
+        let value = input[i];
+        if (Number.isNaN(value)) value = 0; // Infinity still clamps like the harness
+        if (value > 1) value = 1;
+        else if (value < -1) value = -1;
+        output[i] = Math.round(value * (value < 0 ? 32768 : 32767));
+      }
+      return output;
+    }
+
+    /**
+     * Canonical little-endian mono PCM16 WAV bytes (RIFF/WAVE, 44-byte header,
+     * "fmt " chunk of 16, format 1, one channel, 16 bits per sample). This is what
+     * POST /voice-mode/transcribe accepts as a raw `audio/wav` body.
+     */
+    function encodeWav16(samples, sampleRate) {
+      const pcm = float32ToPcm16(samples);
+      const rate = Math.max(1, Math.round(voiceModeAudioPositive(sampleRate, 16000)));
+      const bytes = new Uint8Array(44 + pcm.length * 2);
+      const view = new DataView(bytes.buffer);
+
+      const writeText = (offset, text) => {
+        for (let i = 0; i < text.length; i += 1) bytes[offset + i] = text.charCodeAt(i);
+      };
+      writeText(0, 'RIFF');
+      view.setUint32(4, bytes.length - 8, true); // RIFF chunk size
+      writeText(8, 'WAVE');
+      writeText(12, 'fmt '); // fmt chunk id
+      view.setUint32(16, 16, true); // fmt chunk size
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, 1, true); // mono
+      view.setUint32(24, rate, true); // sample rate
+      view.setUint32(28, rate * 2, true); // byte rate: rate * channels * bytesPerSample
+      view.setUint16(32, 2, true); // block align
+      view.setUint16(34, 16, true); // bits per sample
+      writeText(36, 'data');
+      view.setUint32(40, pcm.length * 2, true); // data chunk size
+      for (let i = 0; i < pcm.length; i += 1) view.setInt16(44 + i * 2, pcm[i], true);
+      return bytes;
+    }
+
+    /**
+     * Create a frame-driven voice-activity detector.
      *
-     * Continuous voice conversation with the current Session:
-     *  - a microphone control in the composer turns the mode on and off;
-     *  - speech recognition stays open, so the user just talks;
-     *  - silence ends an utterance, which is sent as the next prompt;
-     *  - the assistant reply is turned into speech sentence by sentence as its
-     *    process-local stream arrives;
-     *  - speaking while the assistant talks stops the speech, cancels the running
-     *    turn and captures the interruption as the next prompt.
+     * @param {{sampleRate?: number, startThreshold?: number, continueThreshold?: number,
+     *          startMs?: number, endSilenceMs?: number, minSpeechMs?: number,
+     *          maxUtteranceMs?: number, preRollMs?: number}} [options]
+     *   sampleRate is the AudioContext rate the frames come from (default 48000).
+     *   startThreshold decides when speech may begin; the lower continueThreshold
+     *   keeps an utterance open through quiet syllables. startMs is how long speech
+     *   must be sustained before `speech` is reported (a door slam is too short).
+     *   endSilenceMs closes an utterance, maxUtteranceMs force-closes a pathological
+     *   one, preRollMs is how much audio before the onset is kept, and minSpeechMs
+     *   is the least speech that is worth transcribing.
      *
-     * Everything here runs inside the ModuleLoader factory: React is already in
-     * scope and the engine helpers (stripMarkdown, splitSentences, looksLikeEcho,
-     * pickVoice, createSpeaker) were concatenated ahead of this file by
-     * scripts/build.mjs.
+     * @returns {{push: Function, reset: Function, takeUtterance: Function,
+     *            setThresholds: Function, state: string, speechMs: number}}
+     *   push(frame) returns 'idle' | 'speech' | 'ended' for each frame; 'ended' is
+     *   reported once per utterance and the following push re-arms the detector.
+     */
+    function createVad(options) {
+      const settings = options && typeof options === 'object' ? options : {};
+      const sampleRate = Math.max(
+        1,
+        Math.round(voiceModeAudioPositive(settings.sampleRate, VOICE_MODE_AUDIO_DEFAULT_SAMPLE_RATE)),
+      );
+      let startThreshold = voiceModeAudioThreshold(
+        settings.startThreshold,
+        VOICE_MODE_AUDIO_DEFAULT_START_THRESHOLD,
+      );
+      let continueThreshold = voiceModeAudioThreshold(
+        settings.continueThreshold,
+        VOICE_MODE_AUDIO_DEFAULT_CONTINUE_THRESHOLD,
+      );
+      const startMs = voiceModeAudioNonNegative(settings.startMs, VOICE_MODE_AUDIO_DEFAULT_START_MS);
+      const endSilenceMs = voiceModeAudioNonNegative(
+        settings.endSilenceMs,
+        VOICE_MODE_AUDIO_DEFAULT_END_SILENCE_MS,
+      );
+      const minSpeechMs = voiceModeAudioNonNegative(settings.minSpeechMs, VOICE_MODE_AUDIO_DEFAULT_MIN_SPEECH_MS);
+      const maxUtteranceMs = voiceModeAudioPositive(
+        settings.maxUtteranceMs,
+        VOICE_MODE_AUDIO_DEFAULT_MAX_UTTERANCE_MS,
+      );
+      const preRollMs = voiceModeAudioNonNegative(settings.preRollMs, VOICE_MODE_AUDIO_DEFAULT_PRE_ROLL_MS);
+
+      /** Samples of recent idle audio kept for the pre-roll. */
+      const preRollSamples = Math.round((preRollMs / 1000) * sampleRate);
+      /** Trailing silence kept when an utterance closes. */
+      const tailSilenceSamples = Math.round((VOICE_MODE_AUDIO_TAIL_SILENCE_MS / 1000) * sampleRate);
+      /** Sustained speech needed to report 'speech', in samples. */
+      const startSamples = (startMs / 1000) * sampleRate;
+
+      let state = 'idle';
+      let speechMs = 0;
+
+      // Current utterance.
+      let captureChunks = []; // Float32Array copies, in time order
+      let captureSamples = 0;
+      let trailingSilenceSamples = 0;
+      let lastUtterance = null; // finalized audio of the last 'ended' utterance
+
+      // Idle -> speech candidate (sustained-energy test).
+      let candidateActive = false;
+      let candidateFrames = [];
+      let candidateSamples = 0;
+      let candidatePreRoll = new Float32Array(0);
+
+      // Recent idle audio, so the first word is not clipped.
+      let history = [];
+      let historySamples = 0;
+
+      function clearCandidate() {
+        candidateActive = false;
+        candidateFrames = [];
+        candidateSamples = 0;
+        candidatePreRoll = new Float32Array(0);
+      }
+
+      function clearHistory() {
+        history = [];
+        historySamples = 0;
+      }
+
+      /** Keep at most preRollSamples of recent idle audio, dropping whole frames. */
+      function pushHistory(frame) {
+        if (preRollSamples === 0) return;
+        history.push(frame);
+        historySamples += frame.length;
+        while (history.length > 1 && historySamples - history[0].length >= preRollSamples) {
+          historySamples -= history.shift().length;
+        }
+      }
+
+      /** The last preRollSamples of audio captured before the current onset. */
+      function takePreRoll() {
+        const keep = Math.min(preRollSamples, historySamples);
+        const preRoll = new Float32Array(keep);
+        let write = keep;
+        for (let i = history.length - 1; i >= 0 && write > 0; i -= 1) {
+          const chunk = history[i];
+          const take = Math.min(chunk.length, write);
+          preRoll.set(chunk.subarray(chunk.length - take), write - take);
+          write -= take;
+        }
+        return preRoll;
+      }
+
+      /** Close the current utterance: trim trailing silence and park in 'ended'. */
+      function finishUtterance() {
+        const keepSilence = Math.min(trailingSilenceSamples, tailSilenceSamples);
+        const length = Math.max(0, captureSamples - (trailingSilenceSamples - keepSilence));
+        const accepted = speechMs >= minSpeechMs;
+        const utterance = accepted ? new Float32Array(length) : new Float32Array(0);
+        if (accepted) {
+          let write = 0;
+          for (let i = 0; i < captureChunks.length && write < length; i += 1) {
+            const chunk = captureChunks[i];
+            const take = Math.min(chunk.length, length - write);
+            utterance.set(take === chunk.length ? chunk : chunk.subarray(0, take), write);
+            write += take;
+          }
+        }
+        lastUtterance = utterance;
+        captureChunks = [];
+        captureSamples = 0;
+        trailingSilenceSamples = 0;
+        clearCandidate();
+        clearHistory();
+        state = 'ended';
+      }
+
+      /** Leave 'ended' and start listening again; the utterance stays takeable. */
+      function armIdle() {
+        state = 'idle';
+        speechMs = 0;
+        captureChunks = [];
+        captureSamples = 0;
+        trailingSilenceSamples = 0;
+        clearCandidate();
+        clearHistory();
+      }
+
+      /** Feed one fixed-size capture frame. Returns the current state. */
+      function push(input) {
+        const frame = voiceModeAudioSamples(input);
+        if (frame.length === 0) return state;
+        if (state === 'ended') armIdle();
+
+        const rms = voiceModeAudioRms(frame);
+
+        if (state === 'idle') {
+          if (rms >= startThreshold) {
+            if (!candidateActive) {
+              candidateActive = true;
+              candidateFrames = [];
+              candidateSamples = 0;
+              candidatePreRoll = takePreRoll();
+            }
+            const copy = frame.slice();
+            candidateFrames.push(copy);
+            candidateSamples += copy.length;
+            pushHistory(copy);
+            if (candidateSamples >= startSamples) {
+              state = 'speech';
+              speechMs = (candidateSamples / sampleRate) * 1000;
+              captureChunks =
+                candidatePreRoll.length > 0 ? [candidatePreRoll, ...candidateFrames] : candidateFrames.slice();
+              captureSamples = candidatePreRoll.length + candidateSamples;
+              trailingSilenceSamples = 0;
+              clearCandidate();
+              clearHistory();
+              if (speechMs >= maxUtteranceMs) {
+                finishUtterance();
+                return 'ended';
+              }
+              return 'speech';
+            }
+            return 'idle';
+          }
+          clearCandidate();
+          pushHistory(frame.slice());
+          return 'idle';
+        }
+
+        // state === 'speech'
+        const copy = frame.slice();
+        captureChunks.push(copy);
+        captureSamples += copy.length;
+        if (rms >= continueThreshold) {
+          speechMs += (copy.length / sampleRate) * 1000;
+          trailingSilenceSamples = 0;
+          if (speechMs >= maxUtteranceMs) {
+            finishUtterance();
+            return 'ended';
+          }
+          return 'speech';
+        }
+        trailingSilenceSamples += copy.length;
+        if ((trailingSilenceSamples / sampleRate) * 1000 >= endSilenceMs) {
+          finishUtterance();
+          return 'ended';
+        }
+        return 'speech';
+      }
+
+      /** Drop everything and listen again (thresholds are configuration and stay). */
+      function reset() {
+        state = 'idle';
+        speechMs = 0;
+        captureChunks = [];
+        captureSamples = 0;
+        trailingSilenceSamples = 0;
+        clearCandidate();
+        clearHistory();
+        lastUtterance = null;
+      }
+
+      /**
+       * Exactly the captured audio of the last utterance, as a fresh Float32Array.
+       * Empty before the first utterance and for utterances below minSpeechMs.
+       */
+      function takeUtterance() {
+        return lastUtterance ? lastUtterance.slice() : new Float32Array(0);
+      }
+
+      /** Retune the energy thresholds live; missing or invalid keys keep the value. */
+      function setThresholds(next) {
+        if (!next || typeof next !== 'object') return;
+        startThreshold = voiceModeAudioThreshold(next.startThreshold, startThreshold);
+        continueThreshold = voiceModeAudioThreshold(next.continueThreshold, continueThreshold);
+      }
+
+      return {
+        push,
+        reset,
+        takeUtterance,
+        setThresholds,
+        get state() {
+          return state;
+        },
+        get speechMs() {
+          return speechMs;
+        },
+      };
+    }
+
+    /**
+     * voice-mode — client half (Web GUI), local voice edition.
+     *
+     * Everything audio runs on this machine through the plugin's own host routes:
+     *   POST /voice-mode/transcribe   WAV in, text out   (harness SenseVoice, local)
+     *   POST /voice-mode/speak        text in, WAV out   (Kokoro / macOS say, local)
+     *   GET  /voice-mode/status       engine readiness
+     *
+     * The browser's cloud speech APIs are deliberately not used. The page only
+     * opens the microphone, cuts utterances with a local VAD, ships the utterance
+     * to the host, and plays the returned speech through Web Audio — which makes
+     * interruption immediate: stopping playback is local and instant, cancelling
+     * the running turn follows over the Session Remote.
+     *
+     * Runs inside the ModuleLoader factory: React is in scope and the engine
+     * helpers (stripMarkdown, splitSentences, resampleLinear, encodeWav16,
+     * createVad) were concatenated ahead of this file by scripts/build.mjs.
      */
 
     const SLOT = 'conversation.composer.dock';
     const NS = 'voice-mode';
     const PKG = '@local/voice-mode';
-    const VERSION = '0.1.0';
-    /** Quiet time after the last recognized word before an utterance is committed. */
-    const COMMIT_SILENCE_MS = 650;
-    /** Chrome ends a recognition session on its own; reopen it quickly and quietly. */
-    const RECOGNITION_RESTART_MS = 280;
-    const CAPTION_MAX = 220;
+    const VERSION = '0.2.0';
+    const STATUS_URL = '/voice-mode/status';
+    const TRANSCRIBE_URL = '/voice-mode/transcribe';
+    const SPEAK_URL = '/voice-mode/speak';
+    /** Host speech engines expect 16 kHz mono PCM16 WAV from the browser. */
+    const STT_RATE = 16000;
+    /** Capture frame size; 4096 frames at 48 kHz is ~85 ms per VAD step. */
+    const CAPTURE_FRAME = 4096;
+    /** VAD thresholds: quiet room, then a raised pair while our own speaker is live. */
+    const VAD_IDLE = { startThreshold: 0.022, continueThreshold: 0.011 };
+    const VAD_PLAYING = { startThreshold: 0.06, continueThreshold: 0.03 };
 
     const DICTS = {
       en: {
-        start: 'Start voice conversation',
+        start: 'Start voice conversation (local)',
         stop: 'Stop voice conversation',
         listening: 'Listening',
         hearing: 'Hearing you',
         thinking: 'Thinking',
         speaking: 'Speaking — talk to interrupt',
         insecure: 'Voice mode needs HTTPS or localhost',
-        unavailable: 'This browser has no speech recognition (use Chrome or Edge)',
-        permission: 'Microphone permission denied',
-        network: 'Speech recognition needs a network connection',
+        microphone: 'Microphone unavailable — check the permission',
+        engine: 'Local voice engine is not ready',
+        sttFailed: 'Could not transcribe the utterance',
+        speakFailed: 'Could not speak the reply',
         composer: 'The message composer is not ready',
         promptFailed: 'Could not send the message',
       },
-      // The locale service requires every built-in dictionary; Chinese users see the
-      // English strings until a proper translation lands.
       zh: {
-        start: '开始语音对话',
+        start: '开始本地语音对话',
         stop: '结束语音对话',
         listening: '正在聆听',
         hearing: '正在听你说',
         thinking: '思考中',
         speaking: '朗读中 — 说话即可打断',
         insecure: '语音模式需要 HTTPS 或 localhost',
-        unavailable: '此浏览器不支持语音识别（请使用 Chrome 或 Edge）',
-        permission: '麦克风权限被拒绝',
-        network: '语音识别需要网络连接',
+        microphone: '麦克风不可用 — 请检查权限',
+        engine: '本地语音引擎尚未就绪',
+        sttFailed: '无法识别这段语音',
+        speakFailed: '无法朗读回复',
         composer: '消息输入框尚未就绪',
         promptFailed: '消息发送失败',
       },
     };
 
-    /** Current tab language, falling back to English. */
+    /** Current tab language, used only as an STT language hint. */
     function voiceLanguage() {
       return (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
     }
@@ -809,9 +1257,42 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Build the per-Session voice controller. It owns the recognition, the speaker
-     * and the assistant-stream follower; the React component only renders its state
-     * and forwards clicks.
+     * Cut one early clause out of a still-streaming sentence, at a comma or a word
+     * boundary, so the first audio of a reply is not held back by a long sentence.
+     *
+     * @param {string} text - accumulated speakable text.
+     * @param {number} limit - preferred maximum length of the head.
+     * @returns {{head: string, tail: string}|undefined} split, or undefined when too short.
+     */
+    function cutSpeechClause(text, limit) {
+      if (typeof text !== 'string' || text.length < 32) return undefined;
+      const cap = Math.min(limit, text.length - 1);
+      let cut = -1;
+      for (let index = cap; index > 20; index -= 1) {
+        const char = text[index];
+        if (char === ',' || char === ';' || char === ':' || char === '\u2014') {
+          cut = index + 1;
+          break;
+        }
+      }
+      if (cut < 0) {
+        for (let index = cap; index > 20; index -= 1) {
+          if (text[index] === ' ') {
+            cut = index;
+            break;
+          }
+        }
+      }
+      if (cut <= 0) return undefined;
+      const head = text.slice(0, cut).trim();
+      const tail = text.slice(cut).trim();
+      if (head.length < 24 || !/[\p{L}\p{N}]/u.test(head)) return undefined;
+      return { head, tail };
+    }
+
+    /**
+     * Build the per-Session voice controller. It owns microphone capture, the VAD,
+     * host transcription, playback of local speech, and the assistant text stream.
      *
      * @param {object} options - owning client context, prop reader, translator, state publisher.
      * @returns {object} controller with start/stop/dispose.
@@ -822,26 +1303,35 @@ window.__ModuleLoader__.load({
 
       let active = false;
       let disposed = false;
-      let recognition = null;
-      let speaker = null;
+      let generation = 0;
       let followAbort = null;
-      let commitTimer = 0;
-      let restartTimer = 0;
-      let finalText = '';
-      let interimText = '';
+      let followFrames = 0;
+
+      let mediaStream = null;
+      let inputContext = null;
+      let outputContext = null;
+      let sourceNode = null;
+      let processorNode = null;
+      let sinkNode = null;
+      let vad = null;
+      let captureRate = 48000;
+
       let rawReply = '';
       let speakableSoFar = '';
-      let spokenTail = '';
-      let generation = 0;
-      let followFrames = 0;
+      let speechBuffer = '';
+      let speechQueue = [];
+      let speaking = false;
+      const speakControllers = new Set();
+      const liveSources = new Set();
+      let engineTts = 'unknown';
 
       const post = (patch) => publish(patch);
       const t = (key) => String(getT()(key));
 
       /**
        * Publish machine-readable runtime state next to the boot marker so a
-       * headless probe can prove the voice loop reached its transport, without
-       * reading the conversation or sending a prompt itself.
+       * headless probe can prove the loop reached its transport without sending
+       * anything itself.
        *
        * @param {object} patch - fields merged into `window.__DSH_VOICE_MODE__`.
        */
@@ -852,58 +1342,97 @@ window.__ModuleLoader__.load({
         Object.assign(marker, patch);
       }
 
+      function phase(value) {
+        post({ phase: value });
+      }
+
+      function isPlaying() {
+        return speaking || liveSources.size > 0;
+      }
+
+      function settlePhase() {
+        if (!active) return;
+        if (isPlaying()) {
+          phase('speaking');
+          return;
+        }
+        phase(getProps().running ? 'thinking' : 'listening');
+      }
+
+      /** Raise the VAD thresholds while our own speaker is producing sound. */
+      function tuneVad(playing) {
+        if (!vad || typeof vad.setThresholds !== 'function') return;
+        try {
+          vad.setThresholds(playing ? VAD_PLAYING : VAD_IDLE);
+        } catch (error) {
+          /* thresholds are best-effort */
+        }
+      }
+
       /** Release audio and transport resources without touching rendered state. */
       function teardown() {
         active = false;
-        diag({ mode: 'off', recognition: 'stopped', follow: 'closed' });
-        clearTimeout(commitTimer);
-        clearTimeout(restartTimer);
-        commitTimer = 0;
-        restartTimer = 0;
+        diag({ mode: 'off', capture: 'stopped', vad: 'idle', follow: 'closed' });
 
-        const recognizer = recognition;
-        recognition = null;
+        const recognizer = processorNode;
+        processorNode = null;
         if (recognizer) {
-          recognizer.onresult = null;
-          recognizer.onerror = null;
-          recognizer.onend = null;
+          recognizer.onaudioprocess = null;
           try {
-            recognizer.abort();
+            recognizer.disconnect();
           } catch (error) {
-            /* already stopped */
+            /* already detached */
           }
         }
-
-        const speech = speaker;
-        speaker = null;
-        if (speech) {
+        if (sourceNode) {
           try {
-            speech.stop();
+            sourceNode.disconnect();
           } catch (error) {
-            /* speaker already idle */
+            /* already detached */
           }
-          try {
-            speech.dispose();
-          } catch (error) {
-            /* already disposed */
-          }
+          sourceNode = null;
         }
-
-        const stream = followAbort;
-        followAbort = null;
+        if (sinkNode) {
+          try {
+            sinkNode.disconnect();
+          } catch (error) {
+            /* already detached */
+          }
+          sinkNode = null;
+        }
+        const stream = mediaStream;
+        mediaStream = null;
         if (stream) {
-          try {
-            stream.abort();
-          } catch (error) {
-            /* stream already closed */
+          for (const track of stream.getTracks()) {
+            try {
+              track.stop();
+            } catch (error) {
+              /* already ended */
+            }
           }
         }
+        const input = inputContext;
+        inputContext = null;
+        if (input && typeof input.close === 'function') input.close().catch(() => {});
+        vad = null;
 
-        finalText = '';
-        interimText = '';
+        stopPlayback();
+        const output = outputContext;
+        outputContext = null;
+        if (output && typeof output.close === 'function') output.close().catch(() => {});
+
+        const streamAbort = followAbort;
+        followAbort = null;
+        if (streamAbort) {
+          try {
+            streamAbort.abort();
+          } catch (error) {
+            /* already closed */
+          }
+        }
         rawReply = '';
         speakableSoFar = '';
-        spokenTail = '';
+        speechBuffer = '';
       }
 
       function stop() {
@@ -911,55 +1440,168 @@ window.__ModuleLoader__.load({
         post({ phase: 'off', caption: '', note: '' });
       }
 
-      /** Fatal setup or permission failure: release everything and show one note. */
+      /** Fatal setup or engine failure: release everything and show one note. */
       function fail(message) {
         teardown();
         post({ phase: 'error', caption: '', note: String(message) });
       }
 
-      function phase(value) {
-        post({ phase: value });
-      }
-
-      function caption(value) {
-        post({ caption: value });
-      }
-
-      function isSpeaking() {
-        return Boolean(speaker && speaker.speaking);
-      }
-
-      function settlePhase() {
-        if (!active) return;
-        if (isSpeaking()) return;
-        if (getProps().running) {
-          phase('thinking');
-          return;
+      /** Stop every scheduled or in-flight speech fetch. Local and immediate. */
+      function stopPlayback() {
+        speechQueue = [];
+        speechBuffer = '';
+        for (const controller of [...speakControllers]) {
+          try {
+            controller.abort();
+          } catch (error) {
+            /* already aborted */
+          }
         }
-        phase('listening');
+        speakControllers.clear();
+        for (const source of [...liveSources]) {
+          try {
+            source.stop();
+          } catch (error) {
+            /* already ended */
+          }
+        }
+        liveSources.clear();
+        speaking = false;
       }
 
-      /** Speak the newly arrived part of the assistant reply. */
+      /** User talked over the assistant: stop speech now, cancel the turn after. */
+      function bargeIn() {
+        if (!active) return;
+        diag({ bargeIn: true });
+        stopPlayback();
+        const props = getProps();
+        if (props && props.running && remote && remote.session) {
+          Promise.resolve(remote.session.cancel({ sessionId: props.sessionId })).catch(() => {});
+        }
+        phase('hearing');
+      }
+
+      /** Fetch one sentence's audio from the local host engine. */
+      async function fetchSpeech(text) {
+        const controller = new AbortController();
+        speakControllers.add(controller);
+        try {
+          const response = await fetch(SPEAK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const bytes = await response.arrayBuffer();
+          if (!active || !outputContext) return null;
+          return await outputContext.decodeAudioData(bytes);
+        } finally {
+          speakControllers.delete(controller);
+        }
+      }
+
+      /** Play one decoded buffer; resolves when it ends, is stopped, or fails. */
+      function playBuffer(buffer) {
+        return new Promise((resolve) => {
+          if (!active || !outputContext || !buffer) {
+            resolve();
+            return;
+          }
+          const source = outputContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(outputContext.destination);
+          liveSources.add(source);
+          source.onended = () => {
+            liveSources.delete(source);
+            resolve();
+          };
+          try {
+            source.start();
+            diag({ speak: 'playing', playingSources: liveSources.size, speakQueued: speechQueue.length });
+          } catch (error) {
+            liveSources.delete(source);
+            resolve();
+          }
+        });
+      }
+
+      /**
+       * Speak queued sentences through the local engine, prefetching the next
+       * sentence while the current one plays. Kokoro runs faster than real time on
+       * this host, so prefetching keeps speech gapless after the first sentence.
+       */
+      async function pumpSpeech() {
+        if (speaking || !outputContext) return;
+        speaking = true;
+        tuneVad(true);
+        phase('speaking');
+        try {
+          let pending = null;
+          while (active && (pending || speechQueue.length > 0)) {
+            const current = pending || fetchSpeech(speechQueue.shift());
+            pending = null;
+            let buffer = null;
+            try {
+              buffer = await current;
+            } catch (error) {
+              if (error && error.name === 'AbortError') return;
+              diag({ speak: 'error', speakError: String((error && error.message) || error) });
+              continue;
+            }
+            if (!active) return;
+            if (speechQueue.length > 0) pending = fetchSpeech(speechQueue.shift());
+            await playBuffer(buffer);
+          }
+        } finally {
+          speaking = false;
+          if (active) tuneVad(isPlaying());
+          settlePhase();
+        }
+      }
+
+      /** Queue one complete sentence for playback. */
+      function queueSpeech(text) {
+        const sentence = String(text || '').trim();
+        if (!sentence) return;
+        speechQueue.push(sentence);
+        void pumpSpeech();
+      }
+
+      /** Split newly arrived reply text into speakable sentences. */
       function feedSpeech() {
-        if (!speaker || !rawReply) return;
         const speakable = stripMarkdown(rawReply);
         if (speakable === speakableSoFar) return;
-        // Markdown rewriting can shorten earlier output (a fence closing, a table
-        // collapsing); on such a rewrite advance nothing and stay aligned.
-        if (speakable.length < speakableSoFar.length || !speakable.startsWith(speakableSoFar)) {
+        if (!speakable.startsWith(speakableSoFar)) {
           speakableSoFar = speakable;
           return;
         }
         const delta = speakable.slice(speakableSoFar.length);
         speakableSoFar = speakable;
-        if (delta.trim() === '') return;
-        spokenTail = `${spokenTail} ${delta}`.slice(-600);
-        speaker.push(delta);
+        if (!delta.trim()) return;
+        speechBuffer += delta;
+        const split = splitSentences(speechBuffer);
+        speechBuffer = split.rest;
+        for (const sentence of split.sentences) queueSpeech(sentence);
+        // Before anything has started playing, a long unterminated first sentence
+        // would delay all audio until the model finishes generating it. Cut one
+        // early clause so speech starts while the rest of the sentence arrives.
+        if (!speaking && speechQueue.length === 0 && speechBuffer.length > 96) {
+          const early = cutSpeechClause(speechBuffer, 64);
+          if (early) {
+            queueSpeech(early.head);
+            speechBuffer = early.tail;
+          }
+        }
+        if (speechBuffer.length > 180) {
+          queueSpeech(speechBuffer);
+          speechBuffer = '';
+        }
       }
 
       function flushSpeech() {
-        if (!speaker) return;
-        speaker.flush();
+        if (speechBuffer.trim()) queueSpeech(speechBuffer);
+        speechBuffer = '';
       }
 
       /** Fold one follow-stream frame into the current reply. */
@@ -1037,7 +1679,6 @@ window.__ModuleLoader__.load({
               handleFrame(frame);
             }
           } catch (error) {
-            // A deliberate teardown aborts the stream; that is not a failure.
             if (controller.signal.aborted) {
               diag({ follow: 'closed' });
               return;
@@ -1052,17 +1693,12 @@ window.__ModuleLoader__.load({
       }
 
       /** Send one utterance as the next prompt, cancelling a running turn first. */
-      async function send(text) {
+      async function submit(text) {
         const props = getProps();
-        if (!props || !props.sessionId) {
+        if (!props || !props.sessionId || !remote || !remote.session) {
           fail(t('composer'));
           return;
         }
-        if (!remote || !remote.session || typeof remote.session.prompt !== 'function') {
-          fail(t('composer'));
-          return;
-        }
-        phase('thinking');
         diag({ prompt: 'writing', lastPrompt: text.slice(0, 160) });
         if (props.running) {
           try {
@@ -1092,167 +1728,205 @@ window.__ModuleLoader__.load({
         }
       }
 
-      /** Close the current utterance after a quiet period and send it. */
-      function commit() {
-        clearTimeout(commitTimer);
-        commitTimer = 0;
-        if (!active) return;
-        const text = `${finalText} ${interimText}`.replace(/\s+/g, ' ').trim();
-        finalText = '';
-        interimText = '';
-        caption('');
-        if (!text) return;
-        void send(text);
-      }
-
-      /** True when `probe` is the user talking over the assistant rather than echo. */
-      function shouldInterrupt(probe) {
-        if (!isSpeaking()) return false;
-        const spoken = `${speaker.currentText || ''} ${spokenTail}`.trim();
-        return !looksLikeEcho(probe, spoken);
-      }
-
-      /** Stop the reply, cancel the running turn, and take over the conversation. */
-      function bargeIn() {
-        if (!active) return;
-        if (speaker) {
-          try {
-            speaker.stop();
-          } catch (error) {
-            /* already idle */
-          }
-        }
-        const props = getProps();
-        if (props && props.running && remote && remote.session) {
-          Promise.resolve(remote.session.cancel({ sessionId: props.sessionId })).catch(() => {});
-        }
-        phase('hearing');
-      }
-
-      function onResult(event) {
-        if (!active) return;
-        let finalPart = '';
-        let interimPart = '';
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
-          const result = event.results[index];
-          const alternative = result && result[0];
-          const text = alternative && alternative.transcript ? alternative.transcript : '';
-          if (!text) continue;
-          if (result.isFinal) finalPart += text;
-          else interimPart += text;
-        }
-        const probe = (finalPart || interimPart).trim();
-        if (probe && shouldInterrupt(probe)) bargeIn();
-        if (finalPart) finalText = `${finalText} ${finalPart}`.trim();
-        interimText = interimPart;
-        const shown = `${finalText} ${interimText}`.replace(/\s+/g, ' ').trim();
-        caption(shown.slice(-CAPTION_MAX));
-        if (shown && !isSpeaking()) phase('hearing');
-
-        clearTimeout(commitTimer);
-        commitTimer = setTimeout(commit, COMMIT_SILENCE_MS);
-      }
-
-      function startRecognition(Ctor) {
+      /** Transcribe one captured utterance on the host and send it as a prompt. */
+      async function transcribeAndSend(samples) {
+        phase('thinking');
+        diag({ transcribe: 'running' });
         try {
-          recognition = new Ctor();
-        } catch (error) {
-          fail(t('unavailable'));
-          return;
-        }
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-        recognition.lang = voiceLanguage();
-        recognition.onresult = onResult;
-        recognition.onerror = (event) => {
-          const code = event && event.error;
-          diag({ recognition: 'error', recognitionError: String(code || 'unknown') });
-          if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'audio-capture') {
-            fail(t('permission'));
+          const resampled = captureRate === STT_RATE ? samples : resampleLinear(samples, captureRate, STT_RATE);
+          const wav = encodeWav16(resampled, STT_RATE);
+          diag({ transcribeBytes: wav.byteLength });
+          const url = `${TRANSCRIBE_URL}?lang=${encodeURIComponent(voiceLanguage())}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'audio/wav' },
+            body: wav,
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          if (!active) return;
+          const text = String((data && data.text) || '').trim();
+          diag({ transcribe: 'ok', lastHeard: text.slice(0, 160) });
+          if (!text) {
+            settlePhase();
             return;
           }
-          if (code === 'network') {
-            post({ note: t('network') });
+          // Verification hook: a headless probe can exercise capture -> transcribe
+          // without letting fake-device audio become a real message in the Session.
+          const marker = typeof window !== 'undefined' ? window.__DSH_VOICE_MODE__ : undefined;
+          if (marker && marker.suppressPrompts) {
+            diag({ prompt: 'suppressed' });
+            settlePhase();
+            return;
           }
-          // `no-speech` and `aborted` are the normal end of a quiet phrase.
-        };
-        recognition.onend = () => {
-          if (!active) return;
-          diag({ recognition: 'restarting' });
-          clearTimeout(restartTimer);
-          restartTimer = setTimeout(() => {
-            if (!active || !recognition) return;
-            try {
-              recognition.start();
-            } catch (error) {
-              /* a start is already pending */
-            }
-          }, RECOGNITION_RESTART_MS);
-        };
-        try {
-          recognition.start();
-          diag({ recognition: 'started' });
+          await submit(text);
         } catch (error) {
-          diag({ recognition: 'failed', recognitionError: String((error && error.message) || error) });
-          fail(t('unavailable'));
+          diag({ transcribe: 'error', transcribeError: String((error && error.message) || error) });
+          if (active) {
+            post({ note: t('sttFailed') });
+            settlePhase();
+          }
         }
       }
 
-      function start() {
+      /** One VAD step from a captured frame. */
+      function onAudioFrame(frame) {
+        if (!active || !vad) return;
+        const state = vad.push(frame);
+        if (state === 'speech') {
+          diag({ vad: 'speech' });
+          if (isPlaying()) bargeIn();
+          else phase('hearing');
+          return;
+        }
+        if (state === 'ended') {
+          diag({ vad: 'ended' });
+          const speechMs = Number(vad.speechMs) || 0;
+          let utterance = null;
+          try {
+            utterance = vad.takeUtterance();
+          } catch (error) {
+            utterance = null;
+          }
+          if (!utterance || utterance.length === 0 || speechMs < 200) {
+            diag({ vad: 'idle', lastSpeechMs: speechMs, transcribe: 'skipped' });
+            settlePhase();
+            return;
+          }
+          diag({ vad: 'idle', lastSpeechMs: speechMs });
+          void transcribeAndSend(utterance);
+          return;
+        }
+      }
+
+      function onAudioProcess(event) {
+        if (!active || !vad) return;
+        const input = event.inputBuffer.getChannelData(0);
+        // The buffer is reused by the audio thread; the VAD keeps the frames.
+        const frame = new Float32Array(input.length);
+        frame.set(input);
+        onAudioFrame(frame);
+      }
+
+      /** Open the microphone and start the local VAD. */
+      async function startCapture() {
+        const media = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+        if (!media || typeof media.getUserMedia !== 'function') {
+          fail(t('microphone'));
+          return false;
+        }
+        let stream;
+        try {
+          stream = await media.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+            video: false,
+          });
+        } catch (error) {
+          if (!active) return false;
+          fail(t('microphone'));
+          return false;
+        }
+        if (!active) {
+          for (const track of stream.getTracks()) track.stop();
+          return false;
+        }
+        mediaStream = stream;
+        for (const track of stream.getTracks()) {
+          track.addEventListener('ended', () => {
+            if (active) fail(t('microphone'));
+          });
+        }
+        const AudioCtor =
+          (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) || undefined;
+        if (!AudioCtor) {
+          fail(t('microphone'));
+          return false;
+        }
+        try {
+          inputContext = new AudioCtor();
+          if (typeof inputContext.resume === 'function') await inputContext.resume();
+          captureRate = inputContext.sampleRate || 48000;
+          vad = createVad({ sampleRate: captureRate });
+          sourceNode = inputContext.createMediaStreamSource(stream);
+          processorNode = inputContext.createScriptProcessor(CAPTURE_FRAME, 1, 1);
+          processorNode.onaudioprocess = onAudioProcess;
+          sinkNode = inputContext.createGain();
+          sinkNode.gain.value = 0;
+          sourceNode.connect(processorNode);
+          processorNode.connect(sinkNode);
+          sinkNode.connect(inputContext.destination);
+        } catch (error) {
+          fail(t('microphone'));
+          return false;
+        }
+        return true;
+      }
+
+      async function start() {
         if (disposed || active) return;
         if (typeof window !== 'undefined' && window.isSecureContext === false) {
           fail(t('insecure'));
           return;
         }
-        const Ctor =
-          typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-        if (!Ctor) {
-          fail(t('unavailable'));
-          return;
-        }
-        const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
-        if (!synth) {
-          fail(t('unavailable'));
+        const AudioCtor =
+          (typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) || undefined;
+        if (!AudioCtor) {
+          fail(t('microphone'));
           return;
         }
 
         active = true;
         generation += 1;
         const run = generation;
-        finalText = '';
-        interimText = '';
-        rawReply = '';
-        speakableSoFar = '';
-        spokenTail = '';
-        diag({ mode: 'on', recognition: 'starting', follow: 'idle', prompt: 'idle' });
+        finalFieldsReset();
+        diag({
+          mode: 'on',
+          capture: 'starting',
+          vad: 'idle',
+          follow: 'idle',
+          transcribe: 'idle',
+          speak: 'idle',
+          prompt: 'idle',
+          bargeIn: false,
+        });
         post({ phase: 'listening', caption: '', note: '' });
 
-        speaker = createSpeaker({
-          lang: voiceLanguage(),
-          rate: 1,
-          synth,
-          // The engine reports per-utterance callbacks; onState is accepted too when
-          // the engine version exposes the aggregate transition callback.
-          onstart: () => {
-            if (active) phase('speaking');
-          },
-          onend: () => {
-            if (active) settlePhase();
-          },
-          onerror: () => {
-            if (active) settlePhase();
-          },
-          onState: (state) => {
-            if (!active) return;
-            const speaking = state && typeof state === 'object' ? state.speaking : Boolean(state);
-            if (speaking) phase('speaking');
-            else settlePhase();
-          },
-        });
+        try {
+          const response = await fetch(STATUS_URL, { headers: { Accept: 'application/json' } });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const status = await response.json();
+          engineTts = (status && status.tts && status.tts.engine) || 'none';
+          diag({ engine: engineTts, ttsReady: Boolean(status && status.tts && status.tts.ready) });
+          if (!status || status.ok !== true) throw new Error('engine not ok');
+        } catch (error) {
+          diag({ status: 'error', statusError: String((error && error.message) || error) });
+          fail(t('engine'));
+          return;
+        }
 
-        startRecognition(Ctor);
+        try {
+          outputContext = new AudioCtor();
+          if (typeof outputContext.resume === 'function') await outputContext.resume();
+        } catch (error) {
+          fail(t('engine'));
+          return;
+        }
+
         void pumpFollow(run);
+        const captured = await startCapture();
+        if (!captured) return;
+        if (!active) return;
+        diag({ capture: 'running' });
+      }
+
+      function finalFieldsReset() {
+        rawReply = '';
+        speakableSoFar = '';
+        speechBuffer = '';
       }
 
       function dispose() {
@@ -1335,7 +2009,7 @@ window.__ModuleLoader__.load({
           phaseValue === 'off'
             ? t('start')
             : phaseValue === 'error'
-              ? ui.note || t('unavailable')
+              ? ui.note || t('engine')
               : t('stop');
         const status =
           phaseValue === 'hearing'
@@ -1469,9 +2143,6 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // `remote.session` is its own injectable namespace: without the dotted key the
-    // Cordis getter throws on first access ("cannot get property remote.session
-    // without inject"), which killed the follow loop before it opened.
     return { inject: ['slots', 'locale', 'remote', 'remote.session'], apply };
   },
 });
