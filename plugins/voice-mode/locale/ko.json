@@ -1,0 +1,15 @@
+{
+  "start": "음성 대화 시작",
+  "stop": "음성 대화 중지",
+  "listening": "듣는 중",
+  "hearing": "말씀 듣는 중",
+  "thinking": "생각 중",
+  "speaking": "말하는 중 — 말하면 중단",
+  "insecure": "음성 모드는 HTTPS 또는 localhost에서만 동작합니다",
+  "unavailable": "이 브라우저는 음성 인식을 지원하지 않습니다 (Chrome 또는 Edge 사용)",
+  "permission": "마이크 권한이 거부되었습니다",
+  "network": "음성 인식에는 네트워크 연결이 필요합니다",
+  "composer": "메시지 입력기가 준비되지 않았습니다",
+  "promptFailed": "메시지를 보내지 못했습니다",
+  "caption": "나: {{text}}"
+}

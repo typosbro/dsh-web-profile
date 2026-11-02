@@ -1,0 +1,5 @@
+# Mount @local/voice-mode: a composer-dock voice control plus the continuous
+# conversation loop (speech in -> prompt, reply spoken, barge-in -> cancel turn).
+- insert:
+    - id: voice-mode
+      name: '@local/voice-mode'

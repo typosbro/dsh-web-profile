@@ -1,0 +1,15 @@
+{
+  "start": "Start voice conversation",
+  "stop": "Stop voice conversation",
+  "listening": "Listening",
+  "hearing": "Hearing you",
+  "thinking": "Thinking",
+  "speaking": "Speaking — talk to interrupt",
+  "insecure": "Voice mode needs HTTPS or localhost",
+  "unavailable": "This browser has no speech recognition (use Chrome or Edge)",
+  "permission": "Microphone permission denied",
+  "network": "Speech recognition needs a network connection",
+  "composer": "The message composer is not ready",
+  "promptFailed": "Could not send the message",
+  "caption": "You: {{text}}"
+}

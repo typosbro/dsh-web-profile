@@ -4,6 +4,7 @@
   "dependencies": {
     "@local/dsh-orchestrator-preset": "link:../../presets/orchestrator",
     "@local/dsh-web-search-local": "link:../../plugins/web-search",
+    "@local/voice-mode": "link:../../plugins/voice-mode",
     "dsh-relay": "github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8",
     "@local/dsh-worker-preset": "link:../../presets/worker"
   },
@@ -13,6 +14,7 @@
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
         "@deepseek-ai/dsh-experimental-voice-input-bundle",
+        "@local/voice-mode",
         "@deepseek-ai/dsh-experimental-agent-team-profile",
         "@deepseek-ai/dsh-experimental-session-search",
         "@deepseek-ai/dsh-experimental-session-titles-bundle",
