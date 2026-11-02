@@ -18,9 +18,8 @@ cloud speech service:
 | Direction | Engine | Where |
 | --- | --- | --- |
 | Speech → text | harness `speechToText` / SenseVoice ONNX (int8) | host, already provisioned by `dsh-experimental-voice-input-bundle` |
-| Text → speech (preferred) | **kokoro-fastapi** on loopback `127.0.0.1:8880` — fp32 Kokoro v1.0 on Apple MPS, voice `af_sky` (the same stack the VoiceMode MCP installs and runs) | host, no download needed |
-| Text → speech (fallback) | Kokoro-82M int8 multi-lang via `sherpa-onnx-node`, model in `~/.dsh/voice-mode/tts/` | host |
-| Fallback TTS | macOS `say` (local) for Hangul text and when no Kokoro is available | host |
+| Text → speech | **kokoro-fastapi** on loopback `127.0.0.1:8880` — fp32 Kokoro v1.0 on Apple MPS, voice `af_sky` (the same stack the VoiceMode MCP installs and runs) | host, nothing downloaded by this plugin |
+| Fallback TTS | macOS `say` (local) for Hangul text and when the service is not running | host |
 
 The browser only captures audio, runs the VAD, and plays returned WAV through Web
 Audio. That is what makes barge-in feel immediate: stopping playback is local and
@@ -33,14 +32,13 @@ synchronous.
 - The host profile must have the voice-input bundle's local SenseVoice provider
   ready (it already is on this machine). The plugin never falls back to a cloud
   provider.
-- Preferred voice: the local `kokoro-fastapi` service that the VoiceMode MCP
-  setup already runs on `127.0.0.1:8880` (fp32 Kokoro v1.0, Apple MPS, voice
-  `af_sky`). If it is not running the plugin falls back to its own int8 Kokoro.
+- One voice version only: the local `kokoro-fastapi` service that the VoiceMode
+  MCP setup already runs on `127.0.0.1:8880` (fp32 Kokoro v1.0, Apple MPS,
+  voice `af_sky`). The plugin does not ship, download, or load a second
+  (quantised) Kokoro model; that duplicate was removed to save disk and memory.
+  If the service is not running, English falls back to macOS `say`.
   Override the endpoint with `VOICE_MODE_KOKORO_HTTP` and the Latin voice with
   `VOICE_MODE_KOKORO_HTTP_VOICE`; only loopback URLs are accepted.
-- Built-in Kokoro model: ~132 MB, downloaded once into
-  `~/.dsh/voice-mode/tts/kokoro-int8-multi-lang-v1_0/` by
-  `node scripts/fetch-tts-model.mjs`. On this machine it is already installed.
 - `sherpa-onnx-node` (native, darwin-arm64) — a package dependency. The host half resolves it
   from the profile's pnpm store when the linked plugin has no `node_modules` of its own;
   running `pnpm install` in this directory also satisfies it.
@@ -56,19 +54,13 @@ cd ~/src/dsh-web-profile
 A fresh `./bootstrap.sh` installs it too: `profiles/web/package.json` links
 `@local/voice-mode` and lists it in `dsh.profile.bundles`.
 
-Model fetch (idempotent, safe to re-run):
-
-```bash
-node scripts/fetch-tts-model.mjs
-```
-
 Rebuild the browser artifact after editing `src/`:
 
 ```bash
 node scripts/build.mjs      # writes client.js
 node --check client.js
 node --test                 # engine + audio + host tests
-node tools/tts-check.mjs    # synthesizes test WAVs from the local engine
+node tools/tts-check.mjs    # synthesizes test WAVs from the single local engine
 ```
 
 ## Routes (host half)
@@ -94,7 +86,7 @@ All routes sit behind the harness connection gate.
 - Turn-taking is endpointed, not full duplex: the agent starts after your ~0.7 s
   pause, so overlapping speech mid-sentence is used for interruption rather than
   streaming ASR.
-- Engine latency is the local models': SenseVoice ~0.3 s for a short utterance,
-  Kokoro ~0.5 s per sentence on this Mac. That is the price of staying local.
+- Engine latency is local: SenseVoice ~0.1-0.3 s for a short utterance, the
+  fp32 Kokoro service ~0.5-1 s per sentence on this Mac.
 - Barge-in trusts the browser's echo cancellation; on loud speakers raise the
   playback thresholds in `src/app.js` or use headphones.

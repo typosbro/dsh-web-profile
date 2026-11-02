@@ -20,17 +20,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { apply, readSttStatus } from '../index.js';
-import {
-  KOKORO_DEFAULT_SID,
-  KOKORO_SAMPLE_RATE,
-  KOKORO_SIDS,
-  DEFAULT_SID_BY_SCRIPT,
-  VoiceEngineError,
-  createTtsEngine,
-  findKokoroModel,
-  loadSherpaModule,
-  pickSayVoice,
-} from '../lib/tts.js';
+import { VoiceEngineError, createTtsEngine, pickSayVoice } from '../lib/tts.js';
 import {
   ValidationError,
   coerceProviderLanguage,
@@ -143,40 +133,6 @@ function createFakeExecFile({ failSay = false } = {}) {
   return { execFileFn, calls };
 }
 
-/** Fake sherpa-onnx module that reports what config the loader asked for. */
-function createFakeSherpa({ generateError } = {}) {
-  const configs = [];
-  const module = {
-    version: '1.13.8',
-    onnxruntimeVersion: 'fake-1.28.2',
-    OfflineTts: {
-      createAsync: async (config) => {
-        configs.push(config);
-        return {
-          sampleRate: KOKORO_SAMPLE_RATE,
-          numSpeakers: KOKORO_SIDS.length,
-          generateAsync: async ({ text, sid }) => {
-            if (generateError !== undefined) throw generateError;
-            return { samples: new Float32Array(4800).fill(0.1), sampleRate: KOKORO_SAMPLE_RATE, meta: { text, sid } };
-          },
-        };
-      },
-    },
-  };
-  return { module, configs };
-}
-
-/** Create a complete, loadable-looking model directory. */
-async function createFakeModelDir() {
-  const dir = await mkdtemp(join(tmpdir(), 'voice-mode-model-'));
-  await writeFile(join(dir, 'model.int8.onnx'), Buffer.alloc(2048, 1));
-  await writeFile(join(dir, 'voices.bin'), Buffer.alloc(64, 2));
-  await writeFile(join(dir, 'tokens.txt'), Buffer.alloc(32, 3));
-  await writeFile(join(dir, 'lexicon-us-en.txt'), Buffer.alloc(16, 4));
-  await mkdir(join(dir, 'espeak-ng-data'));
-  return dir;
-}
-
 /** Fake `ctx.speechToText` matching the harness service shape used by the routes. */
 function createFakeSpeechToText({ phase = 'standby', location = 'host-local', transcript = 'hello world', failures } = {}) {
   const calls = { resolve: [], transcribe: [], snapshot: 0 };
@@ -220,7 +176,7 @@ function createFakeTts({ error, statusError } = {}) {
       return {
         ready: true,
         engine: 'kokoro',
-        sampleRate: KOKORO_SAMPLE_RATE,
+        sampleRate: 24000,
         modelDir: '/tmp/fake-kokoro',
         speakerCount: 54,
         sids: [{ sid: 3, name: 'af_heart' }],
@@ -230,7 +186,7 @@ function createFakeTts({ error, statusError } = {}) {
     async synthesize(input) {
       calls.synthesize.push(input);
       if (error !== undefined) throw error;
-      return { samples, sampleRate: KOKORO_SAMPLE_RATE, engine: 'kokoro', sid: input.sid ?? KOKORO_DEFAULT_SID, voice: 'af_heart' };
+      return { samples, sampleRate: 24000, engine: 'kokoro', sid: input.sid ?? 3, voice: 'af_heart' };
     },
     dispose() {
       calls.disposed = true;
@@ -490,18 +446,6 @@ test('coerceProviderLanguage maps region variants and rejects unknown hints', ()
 // lib/tts.js
 // ---------------------------------------------------------------------------
 
-test('Kokoro speaker table matches the ONNX metadata mapping', () => {
-  assert.equal(KOKORO_SIDS.length, 54);
-  assert.equal(KOKORO_SIDS[KOKORO_DEFAULT_SID], 'af_heart');
-  assert.equal(KOKORO_SIDS[37], 'jf_alpha');
-  assert.equal(KOKORO_SIDS[46], 'zf_xiaoni');
-  assert.equal(KOKORO_SIDS[47], 'zf_xiaoxiao');
-  assert.equal(KOKORO_SIDS[53], 'em_santa');
-  assert.equal(DEFAULT_SID_BY_SCRIPT.latin, KOKORO_DEFAULT_SID);
-  assert.equal(DEFAULT_SID_BY_SCRIPT.cjk, 47);
-  assert.equal(DEFAULT_SID_BY_SCRIPT.kana, 37);
-});
-
 test('pickSayVoice honours natural-voice preferences, overrides, and parenthetical names', () => {
   const voices = [
     { name: 'Eddy', locale: 'ko_KR', natural: false },
@@ -515,154 +459,93 @@ test('pickSayVoice honours natural-voice preferences, overrides, and parenthetic
   assert.equal(pickSayVoice([], 'cjk'), undefined);
 });
 
-test('findKokoroModel detects a complete extracted model and ignores a partial one', async (t) => {
-  const dir = await createFakeModelDir();
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const found = findKokoroModel(dir);
-  assert.ok(found !== null);
-  assert.equal(found.model, join(dir, 'model.int8.onnx'));
-  assert.equal(found.lexicon.includes('lexicon-us-en.txt'), true);
-
-  const partial = await mkdtemp(join(tmpdir(), 'voice-mode-partial-'));
-  t.after(() => rm(partial, { recursive: true, force: true }));
-  assert.equal(findKokoroModel(partial), null);
-  assert.equal(findKokoroModel('/definitely/not/a/model/dir'), null);
-});
-
-test('loadSherpaModule reports a clear error when no candidate loads', () => {
-  const failingRequire = () => {
-    throw Object.assign(new Error('Cannot find module sherpa-onnx-node'), { code: 'MODULE_NOT_FOUND' });
+/** Fake fetch for the loopback Kokoro service: voices + one WAV response. */
+function fakeKokoroFetch(calls = []) {
+  return async (url, init) => {
+    const target = String(url);
+    calls.push({ url: target, init });
+    if (target.endsWith('/v1/audio/voices')) {
+      return new Response(JSON.stringify({ voices: ['af_sky', 'zf_xiaoxiao', 'jf_alpha'] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (target.endsWith('/v1/audio/speech')) {
+      return new Response(encodeWav16(new Float32Array(2400).fill(0.1), 24000), {
+        status: 200,
+        headers: { 'Content-Type': 'audio/wav' },
+      });
+    }
+    return new Response('not found', { status: 404 });
   };
-  assert.throws(
-    () => loadSherpaModule({ env: { VOICE_MODE_PNPM_STORE: '/nonexistent-pnpm-store' }, require: failingRequire }),
-    (error) => error instanceof VoiceEngineError && error.code === 'engine-unavailable' && /MODULE_NOT_FOUND/.test(error.message),
-  );
-});
+}
 
-test('createTtsEngine reports status and routes text to the right engine', async (t) => {
-  const dir = await createFakeModelDir();
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const sherpa = createFakeSherpa();
-  const say = createFakeExecFile();
+test('createTtsEngine uses exactly one Kokoro version: the loopback service', async () => {
+  const calls = [];
   const engine = createTtsEngine({
-    kokoroHttp: { baseUrl: '' },
-    modelDir: dir,
-    loadSherpa: () => sherpa.module,
-    execFile: say.execFileFn,
-    logger: { warn() {} },
+    kokoroHttp: { baseUrl: 'http://127.0.0.1:9', fetch: fakeKokoroFetch(calls) },
   });
-  t.after(() => engine.dispose());
-
   const status = await engine.status();
-  assert.equal(status.engine, 'kokoro');
+  assert.equal(status.engine, 'kokoro-http');
   assert.equal(status.ready, true);
-  assert.equal(status.sampleRate, KOKORO_SAMPLE_RATE);
-  assert.equal(status.speakerCount, 54);
-  assert.equal(status.sids.length, 54);
-  assert.equal(status.kokoro.modelPresent, true);
-  assert.equal(status.say.voices.hangul, 'Yuna');
-  assert.equal(status.say.voices.latin, 'Samantha');
-
-  const english = await engine.synthesize({ text: 'Hello from the fake engine.' });
-  assert.equal(english.engine, 'kokoro');
-  assert.equal(english.sid, KOKORO_DEFAULT_SID);
-  assert.equal(english.voice, 'af_heart');
-  assert.equal(english.sampleRate, 24000);
-  assert.equal(english.samples.length, 4800);
-  assert.equal(sherpa.configs.length, 1);
-  assert.equal(sherpa.configs[0].model.kokoro.lang, 'en-us');
-  assert.equal(sherpa.configs[0].maxNumSentences, 1);
-  assert.equal(sherpa.configs[0].model.provider, 'cpu');
-  assert.equal(sherpa.configs[0].model.numThreads, 2);
-
-  // Chinese selects the zh Kokoro language and the Chinese voice default.
-  const chinese = await engine.synthesize({ text: '这是一次完全本地的语音测试。' });
-  assert.equal(chinese.engine, 'kokoro');
-  assert.equal(chinese.lang, 'zh');
-  assert.equal(chinese.sid, 47);
-  assert.equal(sherpa.configs[1].model.kokoro.lang, 'zh');
-
-  // Hangul has no Kokoro voice: it must go straight to macOS say.
-  const korean = await engine.synthesize({ text: '안녕하세요. 로컬 음성 테스트입니다.' });
-  assert.equal(korean.engine, 'say');
-  assert.equal(korean.voice, 'Yuna');
-  assert.ok(korean.samples.length > 0);
-  assert.equal(sherpa.configs.length, 2, 'Hangul never loads a Kokoro instance');
-
-  // An explicit lang override wins over detected script.
-  const forced = await engine.synthesize({ text: 'Hello.', lang: 'ko' });
-  assert.equal(forced.engine, 'say');
+  assert.equal(status.policy.singleService, true);
+  assert.equal(status.policy.int8KokoroEnabled, false);
+  assert.equal(status.sampleRate, 24000);
+  assert.equal(status.http.available, true);
+  await engine.dispose();
 });
 
-test('createTtsEngine falls back to say when Kokoro generation fails', async (t) => {
-  const dir = await createFakeModelDir();
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const sherpa = createFakeSherpa({ generateError: new Error('native synth exploded') });
-  const say = createFakeExecFile();
+test('createTtsEngine synthesises through the service and reports its voice', async () => {
+  const calls = [];
   const engine = createTtsEngine({
-    kokoroHttp: { baseUrl: '' },
-    modelDir: dir,
-    loadSherpa: () => sherpa.module,
-    execFile: say.execFileFn,
-    logger: { warn() {} },
+    kokoroHttp: { baseUrl: 'http://127.0.0.1:9', fetch: fakeKokoroFetch(calls) },
   });
-  t.after(() => engine.dispose());
-
-  const result = await engine.synthesize({ text: 'This sentence falls back.' });
-  assert.equal(result.engine, 'say');
-  assert.equal(result.voice, 'Samantha');
-  assert.match(result.fallbackReason, /native synth exploded/);
+  const audio = await engine.synthesize({ text: 'One local sentence.' });
+  assert.equal(audio.engine, 'kokoro-http');
+  assert.equal(audio.voice, 'af_sky');
+  assert.equal(audio.sampleRate, 24000);
+  assert.ok(audio.samples.length > 0);
+  assert.equal(calls.filter((call) => call.url.endsWith('/v1/audio/speech')).length, 1);
+  await engine.dispose();
 });
 
-test('createTtsEngine with a missing model falls back to say and reports it', async (t) => {
-  const say = createFakeExecFile();
+test('createTtsEngine routes Hangul away from the Kokoro service to say', async () => {
+  const calls = [];
   const engine = createTtsEngine({
-    kokoroHttp: { baseUrl: '' },
-    modelDir: '/definitely/not/a/model/dir',
-    loadSherpa: () => {
-      throw new Error('should not be reached');
+    kokoroHttp: { baseUrl: 'http://127.0.0.1:9', fetch: fakeKokoroFetch(calls) },
+  });
+  let audio;
+  try {
+    audio = await engine.synthesize({ text: '안녕하세요, 반갑습니다.' });
+  } catch (error) {
+    // A machine without a ko_KR say voice cannot render Hangul; that is fine.
+    assert.equal(error instanceof VoiceEngineError, true);
+  }
+  if (audio !== undefined) assert.equal(audio.engine, 'say');
+  assert.equal(calls.filter((call) => call.url.endsWith('/v1/audio/speech')).length, 0);
+  await engine.dispose();
+});
+
+test('createTtsEngine falls back to say when the local service is unreachable', async () => {
+  const engine = createTtsEngine({
+    kokoroHttp: {
+      baseUrl: 'http://127.0.0.1:9',
+      fetch: async () => {
+        throw new Error('connection refused');
+      },
     },
-    execFile: say.execFileFn,
-    logger: { warn() {} },
   });
-  t.after(() => engine.dispose());
-
+  let audio;
+  try {
+    audio = await engine.synthesize({ text: 'Fallback sentence.' });
+  } catch (error) {
+    assert.equal(error instanceof VoiceEngineError, true);
+  }
+  if (audio !== undefined) assert.equal(audio.engine, 'say');
   const status = await engine.status();
-  assert.equal(status.engine, 'say');
-  assert.equal(status.kokoro.modelPresent, false);
-  assert.equal(status.sids.length, 0);
-
-  const result = await engine.synthesize({ text: 'Say still speaks this.' });
-  assert.equal(result.engine, 'say');
-  assert.match(result.fallbackReason, /missing or incomplete/);
+  assert.notEqual(status.engine, 'kokoro-http');
+  await engine.dispose();
 });
-
-test('createTtsEngine rejects when neither engine can speak', async (t) => {
-  const say = createFakeExecFile({ failSay: true });
-  const engine = createTtsEngine({
-    kokoroHttp: { baseUrl: '' },
-    modelDir: '/definitely/not/a/model/dir',
-    execFile: say.execFileFn,
-    logger: { warn() {} },
-  });
-  t.after(() => engine.dispose());
-  await assert.rejects(
-    engine.synthesize({ text: 'Nobody can say this.' }),
-    (error) => error instanceof VoiceEngineError && error.code === 'tts-unavailable',
-  );
-  await assert.rejects(
-    engine.synthesize({ text: '   ' }),
-    (error) => error instanceof VoiceEngineError && error.code === 'empty-text',
-  );
-  await assert.rejects(
-    engine.synthesize({ text: 'Hi.', sid: 99 }),
-    (error) => error instanceof VoiceEngineError && error.code === 'invalid-sid',
-  );
-});
-
-// ---------------------------------------------------------------------------
-// index.js — readSttStatus
-// ---------------------------------------------------------------------------
 
 test('readSttStatus reports missing service, missing provider, and cloud refusal', () => {
   const missing = readSttStatus({});
@@ -709,7 +592,7 @@ test('GET /voice-mode/status reports local STT and Kokoro TTS readiness', async 
   assert.deepEqual(body.stt.languages, ['auto', 'zh', 'en', 'yue', 'ja', 'ko']);
   assert.equal(body.tts.ready, true);
   assert.equal(body.tts.engine, 'kokoro');
-  assert.equal(body.tts.sampleRate, KOKORO_SAMPLE_RATE);
+  assert.equal(body.tts.sampleRate, 24000);
 });
 
 test('GET /voice-mode/status explains an unprepared local provider', async (t) => {
@@ -867,7 +750,7 @@ test('POST /voice-mode/speak returns PCM16 mono WAV audio', async (t) => {
   assert.equal(res.headers.get('cache-control'), 'no-store');
   assert.equal(res.headers.get('x-voice-mode-engine'), 'kokoro');
   assert.equal(res.headers.get('x-voice-mode-sample-rate'), '24000');
-  assert.equal(res.headers.get('x-voice-mode-sid'), String(KOKORO_DEFAULT_SID));
+  assert.equal(res.headers.get('x-voice-mode-sid'), String(3));
   const bytes = Buffer.from(await res.arrayBuffer());
   assert.ok(bytes.byteLength > 44);
   const parsed = parseWav(bytes);

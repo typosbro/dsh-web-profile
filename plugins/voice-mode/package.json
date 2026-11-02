@@ -19,7 +19,6 @@
     "index.js",
     "lib",
     "locale/en.json",
-    "locale/ko.json",
     "scripts",
     "tools"
   ],
@@ -41,7 +40,5 @@
     }
   },
   "license": "MIT",
-  "dependencies": {
-    "sherpa-onnx-node": "1.13.8"
-  }
+  "dependencies": {}
 }
