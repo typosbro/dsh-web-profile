@@ -99,7 +99,7 @@ async function main() {
         clearInterval(interval);
       }
       const elapsedMs = Date.now() - startedAt;
-      if (test.name === 'en' && audio.engine === 'kokoro') {
+      if (test.name === 'en' && (audio.engine === 'kokoro' || audio.engine === 'kokoro-http')) {
         // A 20 ms interval fires at most elapsedMs/20 times; Node timers under
         // load lose a couple, so require half of that plus a small afterglow.
         // A synchronous generate() would leave <= 1 tick and a ~2 s lag.
@@ -135,7 +135,11 @@ async function main() {
       if (!(durationSeconds >= MIN_DURATION_SECONDS && durationSeconds <= MAX_DURATION_SECONDS)) {
         failures.push({ case: test.name, reason: `duration ${durationSeconds}s is outside ${MIN_DURATION_SECONDS}-${MAX_DURATION_SECONDS}s` });
       }
-      if (test.expectEngine !== undefined && audio.engine !== test.expectEngine) {
+      const engineMatches =
+        test.expectEngine === undefined ||
+        audio.engine === test.expectEngine ||
+        (test.expectEngine === 'kokoro' && audio.engine === 'kokoro-http');
+      if (!engineMatches) {
         failures.push({
           case: test.name,
           reason: `engine ${audio.engine} (expected ${test.expectEngine})${audio.fallbackReason === undefined ? '' : `: ${audio.fallbackReason}`}`,
@@ -148,7 +152,7 @@ async function main() {
   }
 
   // Non-blocking proof is a hard acceptance item for the host half.
-  if (status.engine === 'kokoro') {
+  if (status.engine === 'kokoro' || status.engine === 'kokoro-http') {
     if (eventLoopProof === undefined) {
       failures.push({ case: 'event-loop', reason: 'Kokoro was reported available but no Kokoro synthesis ran' });
     } else if (eventLoopProof.ticks < eventLoopProof.expectedTicks) {

@@ -545,6 +545,7 @@ test('createTtsEngine reports status and routes text to the right engine', async
   const sherpa = createFakeSherpa();
   const say = createFakeExecFile();
   const engine = createTtsEngine({
+    kokoroHttp: { baseUrl: '' },
     modelDir: dir,
     loadSherpa: () => sherpa.module,
     execFile: say.execFileFn,
@@ -599,6 +600,7 @@ test('createTtsEngine falls back to say when Kokoro generation fails', async (t)
   const sherpa = createFakeSherpa({ generateError: new Error('native synth exploded') });
   const say = createFakeExecFile();
   const engine = createTtsEngine({
+    kokoroHttp: { baseUrl: '' },
     modelDir: dir,
     loadSherpa: () => sherpa.module,
     execFile: say.execFileFn,
@@ -615,6 +617,7 @@ test('createTtsEngine falls back to say when Kokoro generation fails', async (t)
 test('createTtsEngine with a missing model falls back to say and reports it', async (t) => {
   const say = createFakeExecFile();
   const engine = createTtsEngine({
+    kokoroHttp: { baseUrl: '' },
     modelDir: '/definitely/not/a/model/dir',
     loadSherpa: () => {
       throw new Error('should not be reached');
@@ -637,6 +640,7 @@ test('createTtsEngine with a missing model falls back to say and reports it', as
 test('createTtsEngine rejects when neither engine can speak', async (t) => {
   const say = createFakeExecFile({ failSay: true });
   const engine = createTtsEngine({
+    kokoroHttp: { baseUrl: '' },
     modelDir: '/definitely/not/a/model/dir',
     execFile: say.execFileFn,
     logger: { warn() {} },

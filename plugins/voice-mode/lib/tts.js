@@ -1,14 +1,16 @@
 /**
  * voice-mode — local text-to-speech engines for the Host half.
  *
- * Two engines, both on this Mac and neither one a network call:
+ * Three engines, all local; nothing here leaves the machine:
  *
- *   1. Kokoro int8 multi-lang via `sherpa-onnx-node` (the natural-voice path).
+ *   1. A local `kokoro-fastapi` service on loopback (the VoiceMode MCP setup
+ *      installs one at 127.0.0.1:8880). It serves fp32 Kokoro v1.0 on Apple
+ *      MPS, so it is the clearest, fastest option when it is running.
+ *   2. Kokoro int8 multi-lang via `sherpa-onnx-node` (the built-in fallback).
  *      Loaded lazily, single-flight, one instance per language because the
  *      Kokoro `lang` field selects espeak's text-normalisation language.
- *   2. macOS `say` rendered to a temp WAV and parsed back into float samples.
- *      Used for Hangul (Kokoro has no Korean voice) and as the fallback when
- *      Kokoro cannot load or fails to synthesise the text.
+ *   3. macOS `say` rendered to a temp WAV and parsed back into float samples.
+ *      Used for Hangul (Kokoro has no Korean voice) and as the last fallback.
  *
  * The engine never throws for a missing voice: callers get samples or a
  * {@link VoiceEngineError} carrying a machine-readable `code` and a hint.
@@ -28,6 +30,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { SID_MAX, SID_MIN, detectScript } from './validate.js';
+import { createKokoroHttpProvider } from './kokoro-http.js';
 import { parseWav } from './wav.js';
 
 const execFile = promisify(execFileCallback);
@@ -404,6 +407,13 @@ export function createTtsEngine(options = {}) {
   const logger = options.logger;
   const voiceOverrides = sayVoiceOverrides(env);
 
+  // Optional local kokoro-fastapi service (loopback only). fp32 on Apple MPS
+  // sounds clearer than the built-in int8 CPU engine; it is tried first.
+  const httpKokoro = createKokoroHttpProvider({
+    env,
+    ...(options.kokoroHttp === undefined ? {} : options.kokoroHttp),
+  });
+
   /** Model path set, or null when the extracted model directory is incomplete. */
   let modelPaths;
   try {
@@ -667,6 +677,14 @@ export function createTtsEngine(options = {}) {
 
     let kokoroError;
     if (script !== 'hangul') {
+      // 1. Local kokoro-fastapi service when it is running: same Kokoro family,
+      //    fp32 on Apple MPS — clearer and faster, and still loopback-only.
+      try {
+        return await httpKokoro.synthesize({ text, speed, script });
+      } catch (error) {
+        warn(`local Kokoro HTTP service unavailable, using built-in engine: ${error?.message ?? String(error)}`);
+      }
+      // 2. Built-in int8 Kokoro through sherpa-onnx.
       try {
         return await synthesizeKokoro({ text, sid: resolvedSid, speed, script });
       } catch (error) {
@@ -691,6 +709,7 @@ export function createTtsEngine(options = {}) {
 
   /** Cheap readiness report for `GET /voice-mode/status`. */
   const status = async () => {
+    const httpKokoroStatus = await httpKokoro.status();
     let native = null;
     let kokoroError;
     if (modelPaths !== null) {
@@ -720,11 +739,13 @@ export function createTtsEngine(options = {}) {
     }
 
     const kokoroUsable = modelPaths !== null && native !== null;
-    const engine = kokoroUsable ? 'kokoro' : say.available ? 'say' : 'none';
+    const httpUsable = httpKokoroStatus.available === true;
+    const engine = httpUsable ? 'kokoro-http' : kokoroUsable ? 'kokoro' : say.available ? 'say' : 'none';
     return {
       ready: engine !== 'none',
       engine,
-      sampleRate: engine === 'kokoro' ? KOKORO_SAMPLE_RATE : engine === 'say' ? SAY_SAMPLE_RATE : 0,
+      sampleRate: engine === 'kokoro-http' ? KOKORO_SAMPLE_RATE : engine === 'kokoro' ? KOKORO_SAMPLE_RATE : engine === 'say' ? SAY_SAMPLE_RATE : 0,
+      http: httpKokoroStatus,
       modelDir,
       speakerCount: modelPaths === null ? 0 : KOKORO_SPEAKER_COUNT,
       defaultSid,

@@ -18,8 +18,9 @@ cloud speech service:
 | Direction | Engine | Where |
 | --- | --- | --- |
 | Speech → text | harness `speechToText` / SenseVoice ONNX (int8) | host, already provisioned by `dsh-experimental-voice-input-bundle` |
-| Text → speech | Kokoro-82M int8 multi-lang via `sherpa-onnx-node` (natural neural TTS) | host, model in `~/.dsh/voice-mode/tts/` |
-| Fallback TTS | macOS `say` (local) for Hangul text and when Kokoro is unavailable | host |
+| Text → speech (preferred) | **kokoro-fastapi** on loopback `127.0.0.1:8880` — fp32 Kokoro v1.0 on Apple MPS, voice `af_sky` (the same stack the VoiceMode MCP installs and runs) | host, no download needed |
+| Text → speech (fallback) | Kokoro-82M int8 multi-lang via `sherpa-onnx-node`, model in `~/.dsh/voice-mode/tts/` | host |
+| Fallback TTS | macOS `say` (local) for Hangul text and when no Kokoro is available | host |
 
 The browser only captures audio, runs the VAD, and plays returned WAV through Web
 Audio. That is what makes barge-in feel immediate: stopping playback is local and
@@ -32,7 +33,12 @@ synchronous.
 - The host profile must have the voice-input bundle's local SenseVoice provider
   ready (it already is on this machine). The plugin never falls back to a cloud
   provider.
-- Kokoro model: ~132 MB, downloaded once into
+- Preferred voice: the local `kokoro-fastapi` service that the VoiceMode MCP
+  setup already runs on `127.0.0.1:8880` (fp32 Kokoro v1.0, Apple MPS, voice
+  `af_sky`). If it is not running the plugin falls back to its own int8 Kokoro.
+  Override the endpoint with `VOICE_MODE_KOKORO_HTTP` and the Latin voice with
+  `VOICE_MODE_KOKORO_HTTP_VOICE`; only loopback URLs are accepted.
+- Built-in Kokoro model: ~132 MB, downloaded once into
   `~/.dsh/voice-mode/tts/kokoro-int8-multi-lang-v1_0/` by
   `node scripts/fetch-tts-model.mjs`. On this machine it is already installed.
 - `sherpa-onnx-node` (native, darwin-arm64) — a package dependency. The host half resolves it
