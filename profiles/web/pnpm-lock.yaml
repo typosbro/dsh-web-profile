@@ -27,11 +27,14 @@ importers:
         specifier: link:../../presets/worker
         version: link:../../presets/worker
       '@local/voice-mode':
-        specifier: link:/Users/typosbro/src/dsh-web-profile/plugins/voice-mode
-        version: link:../../../src/dsh-web-profile/plugins/voice-mode
+        specifier: link:../../plugins/voice-mode
+        version: link:../../plugins/voice-mode
       dsh-context:
         specifier: 0.80.2
         version: 0.80.2(@deepseek-ai/schemastery@3.18.5)
+      dsh-keep-awake:
+        specifier: 0.3.1
+        version: 0.3.1(@deepseek-ai/schemastery@3.18.5)
       dsh-leak-guard:
         specifier: 0.1.1
         version: 0.1.1
@@ -216,6 +219,12 @@ packages:
         optional: true
       react-dom:
         optional: true
+
+  dsh-keep-awake@0.3.1:
+    resolution: {integrity: sha512-eysOq7KDyGa0yx6T0Qrj6TPh31GFLlWUAT7VudhbZt0nhl2z/LTuP9tVol3mZnqwDp1fZlFGf+4r4jE3ahNA5w==}
+    engines: {dsh: '>=0.2.0-rc.1 <0.3.0-0', node: '>=22.0.0'}
+    peerDependencies:
+      '@deepseek-ai/schemastery': ~3.18.5
 
   dsh-leak-guard@0.1.1:
     resolution: {integrity: sha512-6swNCBfj313FGL/1mxyVlbF5zQ1/PFEOKk0wsu+/s34TB4GwGhL3dc3oIY+6eOGsUWvie9FJwQ1MIQTXdybLOQ==}
@@ -622,6 +631,10 @@ snapshots:
     dependencies:
       '@deepseek-ai/schemastery': 3.18.5
       zod: 4.6.7
+
+  dsh-keep-awake@0.3.1(@deepseek-ai/schemastery@3.18.5):
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
 
   dsh-leak-guard@0.1.1: {}
 

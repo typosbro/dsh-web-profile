@@ -52,6 +52,14 @@ run commands. "It's just markdown" is not a safety property.
 | `@goodandready/dsh-time-machine` | 0.1.31 | none | exec + fs (git/checkpoint) | snapshots the workspace it is asked to guard |
 | `@goodandready/dsh-plugin-notify` | 0.4.8 | none | network (webhooks) + chime | webhook URLs are credentials |
 | `dsh-context` | 0.80.2 | `prepare` (husky + build; not run for registry installs) | network (remote reads) | manifest marks dsh 0.2.1-rc.2 compatible |
+| `dsh-keep-awake` | 0.3.1 | none | OS power assertion only | manifest marks dsh 0.2.1-rc.2 compatible |
+
+`dsh-plugin-gate` 1.3.2 was evaluated and **refused by the harness itself**: it
+declares `@deepseek-ai/dsh-fs/tools/system-prompt ^0.1.0-rc.6`, which the
+0.2.1-rc.2 runtime rejects as incompatible. Installing it would have required an
+explicit exact-version risk exemption, which is the opposite of the point. The
+vetting checklist above stands in for it until a 0.2.1-compatible release exists.
+
 
 All six are pinned exactly. Nothing here has a `preinstall`/`install`/
 `postinstall` hook.

@@ -12,7 +12,8 @@
     "dsh-leak-guard": "0.1.1",
     "@goodandready/dsh-time-machine": "0.1.31",
     "@goodandready/dsh-plugin-notify": "0.4.8",
-    "dsh-context": "0.80.2"
+    "dsh-context": "0.80.2",
+    "dsh-keep-awake": "0.3.1"
   },
   "dsh": {
     "profile": {
@@ -36,7 +37,8 @@
         "dsh-leak-guard",
         "@goodandready/dsh-time-machine",
         "@goodandready/dsh-plugin-notify",
-        "dsh-context"
+        "dsh-context",
+        "dsh-keep-awake"
       ],
       "patchReload": "live"
     }
