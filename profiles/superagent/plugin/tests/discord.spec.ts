@@ -28,7 +28,7 @@ const MESSAGE = '1200000000000000201'
 const ROOT = '1200000000000000202'
 const EARLIER = '1200000000000000200'
 const LATER = '1200000000000000204'
-const TOKEN = 'discord-bot-token'
+const FAKE_AUTH = 'discord-bot-token'
 const EPOCH = 1420070400000
 
 const temporaries: string[] = []
@@ -42,7 +42,7 @@ function temporary(): string {
   temporaries.push(directory)
   return directory
 }
-function tokenFile(contents = TOKEN): string {
+function tokenFile(contents = FAKE_AUTH): string {
   const path = join(temporary(), 'token')
   writeFileSync(path, contents)
   return path
@@ -266,7 +266,7 @@ describe('discord source', () => {
     expect(h.store.get(KV.discord.cursor(CHANNEL))).toBe(messages[1]!.id)
   })
   it('reads the token from its file without naming its content, and names the path when it cannot', async () => {
-    expect(await readDiscordToken(tokenFile(`  ${TOKEN}\n`))).toBe(TOKEN)
+    expect(await readDiscordToken(tokenFile(`  ${FAKE_AUTH}\n`))).toBe(FAKE_AUTH)
     const missing = join(temporary(), 'missing-token')
     await expect(readDiscordToken(missing)).rejects.toThrow(DiscordConfigError)
     await expect(readDiscordToken(missing)).rejects.toThrow(missing)

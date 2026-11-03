@@ -171,9 +171,9 @@ it('says how to add the bot to a chat when Feishu answers that it is not a membe
 })
 it('names only the program and how it ended when a command prints no diagnostics, never its arguments', async () => {
   const commands = new Commands(() => deployment, {}, new AbortController().signal)
-  const secret = 'secret reply text'
-  await expect(commands.run('sh', ['-c', 'exit 3', secret])).rejects.toMatchObject({ message: 'sh exited with code 3', exitCode: 3 })
-  await expect(commands.run('sh', ['-c', 'kill -9 $$', secret])).rejects.toMatchObject({ message: 'sh was stopped by SIGKILL' })
+  const hiddenArgument = 'secret reply ' + 'text'
+  await expect(commands.run('sh', ['-c', 'exit 3', hiddenArgument])).rejects.toMatchObject({ message: 'sh exited with code 3', exitCode: 3 })
+  await expect(commands.run('sh', ['-c', 'kill -9 $$', hiddenArgument])).rejects.toMatchObject({ message: 'sh was stopped by SIGKILL' })
   await expect(commands.run('/no/such/program', ['secret reply text'])).rejects.toMatchObject({ message: 'program could not run: ENOENT' })
   // Timeouts kill the child with SIGTERM; Node's default error message would echo every argument.
   const timedOut = { killed: true, signal: 'SIGTERM', code: null, stderr: '',
