@@ -6,7 +6,8 @@ process-wide PATH and git settings, owns an `orchestrator.sqlite` state database
 and is meant to be restarted on its own.
 
 - Bundle list: `dsh-base`, `dsh-web-app`, `dsh-superagent`.
-- Source: a **vendored snapshot** at `profiles/superagent/plugin/` (MIT, from
+- Source: a **vendored snapshot** at `profiles/superagent/plugin/` (the upstream
+  `.gitignore` was removed so the prebuilt `lib/` is part of the backup) (MIT, from
   `github.com/deepseek-ai/dsh-superagent-prototype`). It is not the upstream tip:
   the local checkout carried six commits on top of upstream `main` — the Discord
   Source, discussion mode, and build fixes — and those are the ones backed up here.
