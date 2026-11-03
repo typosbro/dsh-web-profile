@@ -170,5 +170,23 @@ else
   warn "local voice routes not reachable (is dsh web running?)"
 fi
 
+# Supply chain: community plugins must be pinned exactly (docs/supply-chain.md).
+UNPINNED="$(python3 - "$WEB_PKG" <<'PY'
+import json, sys
+try:
+    deps = json.load(open(sys.argv[1])).get('dependencies') or {}
+except Exception:
+    raise SystemExit
+ranged = [name for name, spec in deps.items()
+          if isinstance(spec, str) and (spec.startswith('^') or spec.startswith('~'))]
+print(' '.join(ranged))
+PY
+)"
+if [ -n "$UNPINNED" ]; then
+  warn "community dependencies use version ranges: $UNPINNED (pin exact; docs/supply-chain.md)"
+else
+  ok "all profile dependencies pinned exactly"
+fi
+
 printf '\n%d failure(s), %d warning(s)\n\n' "$FAIL" "$WARN"
 [ "$FAIL" -eq 0 ]

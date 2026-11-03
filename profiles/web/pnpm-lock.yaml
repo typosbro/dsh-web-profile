@@ -9,13 +9,13 @@ importers:
   .:
     dependencies:
       '@addozhang/dsh-discord':
-        specifier: ^0.6.5
+        specifier: 0.6.5
         version: 0.6.5
       '@goodandready/dsh-plugin-notify':
-        specifier: ^0.4.8
+        specifier: 0.4.8
         version: 0.4.8(@deepseek-ai/schemastery@3.18.5)
       '@goodandready/dsh-time-machine':
-        specifier: ^0.1.31
+        specifier: 0.1.31
         version: 0.1.31(@deepseek-ai/schemastery@3.18.5)
       '@local/dsh-orchestrator-preset':
         specifier: link:../../presets/orchestrator
@@ -27,19 +27,19 @@ importers:
         specifier: link:../../presets/worker
         version: link:../../presets/worker
       '@local/voice-mode':
-        specifier: link:../../plugins/voice-mode
-        version: link:../../plugins/voice-mode
+        specifier: link:/Users/typosbro/src/dsh-web-profile/plugins/voice-mode
+        version: link:../../../src/dsh-web-profile/plugins/voice-mode
       dsh-context:
-        specifier: ^0.80.2
+        specifier: 0.80.2
         version: 0.80.2(@deepseek-ai/schemastery@3.18.5)
       dsh-leak-guard:
-        specifier: ^0.1.1
+        specifier: 0.1.1
         version: 0.1.1
       dsh-relay:
         specifier: github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8
         version: https://codeload.github.com/hazyumps/deepseek-harness-relay/tar.gz/36321a6ed914166186db84a1ceb514e6283e95e8
       dshmarket:
-        specifier: ^1.73.9
+        specifier: 1.73.9
         version: 1.73.9(@deepseek-ai/schemastery@3.18.5)
 
 packages:
