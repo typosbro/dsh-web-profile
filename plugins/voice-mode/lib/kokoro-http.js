@@ -20,8 +20,16 @@ import { parseWav } from './wav.js';
 /** Loopback endpoint of the local kokoro-fastapi service. */
 export const DEFAULT_KOKORO_HTTP_BASE_URL = 'http://127.0.0.1:8880';
 
-/** Voice used for Latin text unless configured otherwise (the one VoiceMode liked). */
-export const DEFAULT_KOKORO_HTTP_VOICE = 'af_sky';
+/**
+ * Voice used for Latin text unless configured otherwise.
+ *
+ * `af_heart` is Kokoro v1.0's highest-quality female voice in the published
+ * voice ranking, and the previous default `af_sky` is one of its weakest: sky
+ * sounds flat and robotic, which is what the owner heard. Override with
+ * `VOICE_MODE_KOKORO_HTTP_VOICE`, e.g. `af_bella` (warmer), `am_michael` or
+ * `am_onyx` (male), `bf_emma` (British).
+ */
+export const DEFAULT_KOKORO_HTTP_VOICE = 'af_heart';
 
 const PROBE_TIMEOUT_MS = 1500;
 const SYNTH_TIMEOUT_MS = 30_000;

@@ -3,7 +3,7 @@
  *
  * There is exactly one Kokoro engine: the loopback `kokoro-fastapi` service the
  * VoiceMode MCP setup installs (fp32 Kokoro v1.0 on Apple MPS at
- * `127.0.0.1:8880`, default voice `af_sky`). The plugin no longer ships or loads
+ * `127.0.0.1:8880`, default voice `af_heart`). The plugin no longer ships or loads
  * its own quantised model — no second copy on disk, no second engine in memory.
  *
  * The only fallback is macOS `say`, which is part of the operating system and

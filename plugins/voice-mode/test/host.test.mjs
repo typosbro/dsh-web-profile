@@ -196,10 +196,40 @@ function createFakeTts({ error, statusError } = {}) {
 }
 
 /**
+ * Fake whisper HTTP provider for route tests. Unavailable by default so the
+ * harness provider (SenseVoice) stays the deterministic default: a real
+ * whisper-server running on this machine must never leak into test results.
+ */
+function createFakeWhisper({ available = false, text = 'whisper says hi', error } = {}) {
+  const calls = { probe: 0, transcribe: [], status: 0 };
+  const provider = {
+    baseUrl: 'http://127.0.0.1:2023',
+    model: 'whisper-1',
+    async probe() {
+      calls.probe += 1;
+      if (!available) throw new Error('whisper HTTP service is not reachable');
+      return { at: Date.now(), available: true };
+    },
+    async transcribe({ audio, language, signal }) {
+      calls.transcribe.push({ audio, language, signal });
+      if (error !== undefined) throw error;
+      return { text, language: language ?? null, inferenceSeconds: 0.02 };
+    },
+    async status() {
+      calls.status += 1;
+      return available
+        ? { available: true, baseUrl: 'http://127.0.0.1:2023', model: 'whisper-1', language: 'en' }
+        : { available: false, baseUrl: 'http://127.0.0.1:2023', model: 'whisper-1', error: 'not reachable' };
+    },
+  };
+  return { provider, calls };
+}
+
+/**
  * Start a real loopback HTTP server dispatching to the routes `apply()` mounted
  * on a fake context; return its base URL and a disposer.
  */
-async function startHarness({ speechToText, tts, rejection, config } = {}) {
+async function startHarness({ speechToText, tts, whisper, rejection, config } = {}) {
   const routes = new Map();
   const effects = [];
   const ctx = {
@@ -213,6 +243,10 @@ async function startHarness({ speechToText, tts, rejection, config } = {}) {
       },
     },
     speechToText: speechToText ?? createFakeSpeechToText().service,
+    // The turn route subscribes to session events; route tests never emit them.
+    on() {
+      return () => {};
+    },
     effect(callback) {
       const disposer = callback();
       effects.push(disposer);
@@ -220,7 +254,8 @@ async function startHarness({ speechToText, tts, rejection, config } = {}) {
     },
   };
   const ttsHarness = tts ?? createFakeTts().engine;
-  apply(ctx, { tts: ttsHarness, ...(config ?? {}) });
+  const whisperHarness = whisper ?? createFakeWhisper({ available: false }).provider;
+  apply(ctx, { tts: ttsHarness, whisper: whisperHarness, ...(config ?? {}) });
   const server = createServer((req, res) => {
     let pathname;
     try {
@@ -465,7 +500,7 @@ function fakeKokoroFetch(calls = []) {
     const target = String(url);
     calls.push({ url: target, init });
     if (target.endsWith('/v1/audio/voices')) {
-      return new Response(JSON.stringify({ voices: ['af_sky', 'zf_xiaoxiao', 'jf_alpha'] }), {
+      return new Response(JSON.stringify({ voices: ['af_heart', 'af_sky', 'zf_xiaoxiao', 'jf_alpha'] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -502,7 +537,7 @@ test('createTtsEngine synthesises through the service and reports its voice', as
   });
   const audio = await engine.synthesize({ text: 'One local sentence.' });
   assert.equal(audio.engine, 'kokoro-http');
-  assert.equal(audio.voice, 'af_sky');
+  assert.equal(audio.voice, 'af_heart');
   assert.equal(audio.sampleRate, 24000);
   assert.ok(audio.samples.length > 0);
   assert.equal(calls.filter((call) => call.url.endsWith('/v1/audio/speech')).length, 1);
@@ -595,6 +630,19 @@ test('GET /voice-mode/status reports local STT and Kokoro TTS readiness', async 
   assert.equal(body.tts.sampleRate, 24000);
 });
 
+test('GET /voice-mode/status prefers the local whisper server when it answers', async (t) => {
+  const whisper = createFakeWhisper({ available: true });
+  const harness = await startHarness({ whisper: whisper.provider });
+  t.after(() => harness.close());
+  const body = await (await fetch(`${harness.url}/voice-mode/status`)).json();
+  assert.equal(body.ok, true);
+  assert.equal(body.stt.engine, 'whisper-http');
+  assert.equal(body.stt.provider, 'whisper-http');
+  assert.equal(body.stt.fallback, 'sensevoice');
+  assert.equal(body.whisper.available, true);
+  assert.equal(body.whisper.baseUrl, 'http://127.0.0.1:2023');
+});
+
 test('GET /voice-mode/status explains an unprepared local provider', async (t) => {
   const speech = createFakeSpeechToText({ phase: 'unprepared' });
   const harness = await startHarness({ speechToText: speech.service });
@@ -656,6 +704,47 @@ test('POST /voice-mode/transcribe returns local transcript text', async (t) => {
   assert.equal(speech.calls.resolve.length, 1);
   assert.equal(speech.calls.resolve[0].audio.byteLength, audio.byteLength);
   assert.equal(speech.calls.resolve[0].language, undefined);
+  assert.equal(speech.calls.transcribe.length, 1);
+});
+
+test('POST /voice-mode/transcribe prefers the whisper server over the harness provider', async (t) => {
+  const speech = createFakeSpeechToText({ transcript: 'sensevoice text' });
+  const whisper = createFakeWhisper({ available: true, text: 'whisper text' });
+  const harness = await startHarness({ speechToText: speech.service, whisper: whisper.provider });
+  t.after(() => harness.close());
+  const res = await fetch(`${harness.url}/voice-mode/transcribe?lang=en`, { method: 'POST', body: canonicalRecording() });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.text, 'whisper text');
+  assert.equal(body.provider, 'whisper-http');
+  assert.equal(body.language, 'en');
+  assert.equal(whisper.calls.transcribe.length, 1);
+  assert.equal(whisper.calls.transcribe[0].language, 'en');
+  assert.equal(speech.calls.transcribe.length, 0, 'the harness provider is not used when whisper answers');
+});
+
+test('POST /voice-mode/transcribe still answers when only whisper is ready', async (t) => {
+  const speech = createFakeSpeechToText({ phase: 'unprepared' });
+  const whisper = createFakeWhisper({ available: true, text: 'whisper only' });
+  const harness = await startHarness({ speechToText: speech.service, whisper: whisper.provider });
+  t.after(() => harness.close());
+  const res = await fetch(`${harness.url}/voice-mode/transcribe`, { method: 'POST', body: canonicalRecording() });
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).text, 'whisper only');
+  assert.equal(speech.calls.transcribe.length, 0);
+});
+
+test('POST /voice-mode/transcribe falls back to the harness provider when whisper fails', async (t) => {
+  const speech = createFakeSpeechToText({ transcript: 'sensevoice fallback' });
+  const whisper = createFakeWhisper({ available: true, error: new Error('whisper transcription failed: HTTP 500') });
+  const harness = await startHarness({ speechToText: speech.service, whisper: whisper.provider });
+  t.after(() => harness.close());
+  const res = await fetch(`${harness.url}/voice-mode/transcribe`, { method: 'POST', body: canonicalRecording() });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.text, 'sensevoice fallback');
+  assert.equal(body.provider, 'sensevoice');
+  assert.equal(whisper.calls.transcribe.length, 1);
   assert.equal(speech.calls.transcribe.length, 1);
 });
 

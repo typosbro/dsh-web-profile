@@ -9,10 +9,14 @@
  *   POST /voice-mode/transcribe  raw canonical 16 kHz mono PCM16 WAV -> {"text": "..."}
  *   POST /voice-mode/speak       {"text","sid","speed"} -> audio/wav (PCM16 mono)
  *
- * Transcription is delegated to the harness's own `ctx.speechToText` service,
- * which the `web` profile already mounts with the local SenseVoice provider; a
- * non-local (cloud) provider is refused rather than used. Synthesis is the local
- * Kokoro int8 multi-lang model with a macOS `say` fallback (see `lib/tts.js`).
+ * Transcription prefers the local `whisper.cpp` server on loopback (large-v3-turbo
+ * through the OpenAI transcription protocol) whenever it is running, and falls
+ * back to the harness's own `ctx.speechToText` service, which the `web` profile
+ * mounts with the local SenseVoice provider. SenseVoice is the always-present
+ * default; whisper is markedly better on accented English, which is why it is
+ * tried first. A non-local (cloud) provider is refused rather than used.
+ * Synthesis is the local fp32 Kokoro service with a macOS `say` fallback
+ * (see `lib/tts.js` and `lib/kokoro-http.js`).
  *
  * Every route sits behind `ctx.connection.requestRejection` exactly like
  * `browser-live`, answers 405/400/413/503 instead of throwing, and caps request
@@ -23,6 +27,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 
 import { VoiceEngineError, createTtsEngine } from './lib/tts.js';
+import { createWhisperHttpProvider } from './lib/whisper-http.js';
 import {
   ValidationError,
   coerceProviderLanguage,
@@ -293,9 +298,9 @@ export function readSttStatus(ctx) {
 
 /**
  * Validate plugin config into concrete options, keeping a test injection seat
- * for the TTS engine and hard caps for request bodies.
+ * for the TTS engine and the whisper provider plus hard caps for request bodies.
  * @param {unknown} config - Cordis config row (may be absent).
- * @returns {{tts?: object, ttsOptions: object, limits: object, transcribeTimeoutMs: number}} resolved options.
+ * @returns {{tts?: object, whisper?: object, ttsOptions: object, whisperOptions: object, limits: object, transcribeTimeoutMs: number}} resolved options.
  */
 function resolveOptions(config) {
   const source = config !== null && typeof config === 'object' ? config : {};
@@ -308,9 +313,17 @@ function resolveOptions(config) {
     && typeof injected.status === 'function'
     ? injected
     : undefined;
+  const injectedWhisper = source.whisper;
+  const whisper = injectedWhisper !== null && typeof injectedWhisper === 'object'
+    && typeof injectedWhisper.transcribe === 'function'
+    && typeof injectedWhisper.status === 'function'
+    ? injectedWhisper
+    : undefined;
   return {
     ...(tts === undefined ? {} : { tts }),
+    ...(whisper === undefined ? {} : { whisper }),
     ttsOptions: source.ttsOptions !== null && typeof source.ttsOptions === 'object' ? source.ttsOptions : {},
+    whisperOptions: source.whisperOptions !== null && typeof source.whisperOptions === 'object' ? source.whisperOptions : {},
     limits: {
       speakBodyBytes: positiveInteger(limits.speakBodyBytes, MAX_SPEAK_BODY_BYTES),
       audioBodyBytes: positiveInteger(limits.audioBodyBytes, MAX_AUDIO_BODY_BYTES),
@@ -331,6 +344,10 @@ export function apply(ctx, config) {
   const tts = options.tts ?? createTtsEngine({
     ...options.ttsOptions,
     logger: options.ttsOptions.logger ?? ctx.logger,
+  });
+  const whisper = options.whisper ?? createWhisperHttpProvider({
+    ...options.whisperOptions,
+    env: options.whisperOptions.env ?? process.env,
   });
 
   /** Gate every request behind the connection trust check. */
@@ -383,15 +400,36 @@ export function apply(ctx, config) {
       return;
     }
     const stt = readSttStatus(ctx);
+    let whisperStatus;
+    try {
+      whisperStatus = await whisper.status();
+    } catch (error) {
+      whisperStatus = { available: false, error: sanitizeDetail(error) };
+    }
     let ttsStatus;
     try {
       ttsStatus = await tts.status();
     } catch (error) {
       ttsStatus = { ready: false, engine: 'none', sampleRate: 0, error: sanitizeDetail(error) };
     }
+    // whisper is preferred for accuracy, but the harness SenseVoice provider is
+    // what actually tells the browser which languages it may request, so the
+    // reported `stt` block stays the authoritative capability list.
+    const effectiveStt = whisperStatus.available === true
+      ? {
+          ...stt,
+          ready: true,
+          engine: 'whisper-http',
+          provider: 'whisper-http',
+          location: 'host-local',
+          phase: 'ready',
+          fallback: stt.provider,
+        }
+      : stt;
     sendJson(res, 200, {
-      ok: stt.ready === true && ttsStatus.ready === true,
-      stt,
+      ok: effectiveStt.ready === true && ttsStatus.ready === true,
+      stt: effectiveStt,
+      whisper: whisperStatus,
       tts: ttsStatus,
     });
   };
@@ -414,7 +452,10 @@ export function apply(ctx, config) {
     }
 
     const stt = readSttStatus(ctx);
-    if (!stt.ready) {
+    // The whisper probe doubles as the preference decision: a running local
+    // whisper server wins, and the harness provider is the fallback.
+    const whisperReady = await whisper.probe().then(() => true).catch(() => false);
+    if (!stt.ready && !whisperReady) {
       req.resume();
       sendJson(res, 503, { error: 'stt-not-ready', stt, hint: stt.hint }, { 'Retry-After': '2', Connection: 'close' });
       return;
@@ -445,30 +486,6 @@ export function apply(ctx, config) {
       return;
     }
 
-    let language;
-    try {
-      language = coerceProviderLanguage(query.language, stt.languages);
-    } catch (error) {
-      if (!(error instanceof ValidationError)) throw error;
-      sendJson(res, error.status, { error: error.code, detail: error.message, ...(error.hint === undefined ? {} : { hint: error.hint }) });
-      return;
-    }
-
-    let spec;
-    try {
-      spec = ctx.speechToText.resolve({
-        audio: new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength),
-        ...(language === undefined ? {} : { language }),
-      });
-    } catch (error) {
-      sendJson(res, 503, {
-        error: 'stt-not-ready',
-        detail: sanitizeDetail(error),
-        hint: 'The selected local speech provider is unavailable',
-      });
-      return;
-    }
-
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -478,6 +495,57 @@ export function apply(ctx, config) {
     if (typeof timer.unref === 'function') timer.unref();
 
     try {
+      // 1. Preferred: the local whisper server (large-v3-turbo), which is much
+      //    more accurate than SenseVoice int8 on accented English.
+      if (whisperReady) {
+        try {
+          const result = await whisper.transcribe({
+            audio: new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength),
+            language: query.language,
+            signal: controller.signal,
+          });
+          sendJson(res, 200, {
+            text: typeof result?.text === 'string' ? result.text : '',
+            provider: 'whisper-http',
+            language: typeof result?.language === 'string' ? result.language : null,
+            audioSeconds: recording.durationSeconds,
+            inferenceSeconds: typeof result?.inferenceSeconds === 'number' ? result.inferenceSeconds : null,
+          });
+          return;
+        } catch (error) {
+          if (timedOut) {
+            sendJson(res, 504, { error: 'transcription-timeout', detail: `transcription exceeded ${options.transcribeTimeoutMs} ms` });
+            return;
+          }
+          ctx.logger?.warn?.(`voice-mode: whisper transcription failed, falling back to the harness provider: ${sanitizeDetail(error)}`);
+        }
+      }
+
+      // 2. Fallback: the harness's own local provider (SenseVoice).
+      let language;
+      try {
+        language = coerceProviderLanguage(query.language, stt.languages);
+      } catch (error) {
+        if (!(error instanceof ValidationError)) throw error;
+        sendJson(res, error.status, { error: error.code, detail: error.message, ...(error.hint === undefined ? {} : { hint: error.hint }) });
+        return;
+      }
+
+      let spec;
+      try {
+        spec = ctx.speechToText.resolve({
+          audio: new Uint8Array(audio.buffer, audio.byteOffset, audio.byteLength),
+          ...(language === undefined ? {} : { language }),
+        });
+      } catch (error) {
+        sendJson(res, 503, {
+          error: 'stt-not-ready',
+          detail: sanitizeDetail(error),
+          hint: 'The selected local speech provider is unavailable',
+        });
+        return;
+      }
+
       const result = await ctx.speechToText.transcribe(spec, controller.signal);
       sendJson(res, 200, {
         text: typeof result?.text === 'string' ? result.text : '',

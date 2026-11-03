@@ -17,9 +17,15 @@ cloud speech service:
 
 | Direction | Engine | Where |
 | --- | --- | --- |
-| Speech → text | harness `speechToText` / SenseVoice ONNX (int8) | host, already provisioned by `dsh-experimental-voice-input-bundle` |
-| Text → speech | **kokoro-fastapi** on loopback `127.0.0.1:8880` — fp32 Kokoro v1.0 on Apple MPS, voice `af_sky` (the same stack the VoiceMode MCP installs and runs) | host, nothing downloaded by this plugin |
+| Speech → text | **whisper.cpp** `whisper-server` on loopback `127.0.0.1:2023` — ggml large-v3-turbo, OpenAI transcription protocol, `language=en` hint and a domain `prompt` | host, already installed by the VoiceMode MCP setup |
+| Fallback STT | harness `speechToText` / SenseVoice ONNX (int8) | host, already provisioned by `dsh-experimental-voice-input-bundle` |
+| Text → speech | **kokoro-fastapi** on loopback `127.0.0.1:8880` — fp32 Kokoro v1.0 on Apple MPS, voice `af_heart` | host, nothing downloaded by this plugin |
 | Fallback TTS | macOS `say` (local) for Hangul text and when the service is not running | host |
+
+Whisper is preferred because SenseVoice int8 mishears accented English badly; the
+harness provider stays the fallback so the plugin still works when the whisper
+server is not running. Both are local: no audio and no transcript leaves the
+machine.
 
 The browser only captures audio, runs the VAD, and plays returned WAV through Web
 Audio. That is what makes barge-in feel immediate: stopping playback is local and
@@ -32,13 +38,22 @@ synchronous.
 - The host profile must have the voice-input bundle's local SenseVoice provider
   ready (it already is on this machine). The plugin never falls back to a cloud
   provider.
+- The local whisper server is optional but strongly preferred: a
+  `whisper-server` listening on `127.0.0.1:2023` with an
+  `/v1/audio/transcriptions` path. Override with `VOICE_MODE_WHISPER_HTTP`
+  (loopback only; set it empty to disable whisper and always use SenseVoice).
+  `VOICE_MODE_WHISPER_LANGUAGE` defaults to `en` (use `auto` to omit the hint),
+  `VOICE_MODE_WHISPER_PROMPT` biases proper-noun spelling, and
+  `VOICE_MODE_WHISPER_MODEL` sets the form model name.
 - One voice version only: the local `kokoro-fastapi` service that the VoiceMode
   MCP setup already runs on `127.0.0.1:8880` (fp32 Kokoro v1.0, Apple MPS,
-  voice `af_sky`). The plugin does not ship, download, or load a second
+  voice `af_heart` — Kokoro's highest-quality voice; `af_sky` was the old default
+  and sounds flat). The plugin does not ship, download, or load a second
   (quantised) Kokoro model; that duplicate was removed to save disk and memory.
   If the service is not running, English falls back to macOS `say`.
   Override the endpoint with `VOICE_MODE_KOKORO_HTTP` and the Latin voice with
-  `VOICE_MODE_KOKORO_HTTP_VOICE`; only loopback URLs are accepted.
+  `VOICE_MODE_KOKORO_HTTP_VOICE` (`af_bella`, `am_michael`, `am_onyx`,
+  `bf_emma`); only loopback URLs are accepted.
 - `sherpa-onnx-node` (native, darwin-arm64) — a package dependency. The host half resolves it
   from the profile's pnpm store when the linked plugin has no `node_modules` of its own;
   running `pnpm install` in this directory also satisfies it.
@@ -67,8 +82,8 @@ node tools/tts-check.mjs    # synthesizes test WAVs from the single local engine
 
 | Route | Purpose |
 | --- | --- |
-| `GET /voice-mode/status` | engine readiness: STT provider, TTS engine, sample rate, speaker ids |
-| `POST /voice-mode/transcribe` | raw 16 kHz mono PCM16 WAV body → `{ text }`, local SenseVoice |
+| `GET /voice-mode/status` | engine readiness: STT provider (whisper preferred, SenseVoice fallback), TTS engine, sample rate, speaker ids |
+| `POST /voice-mode/transcribe` | raw 16 kHz mono PCM16 WAV body → `{ text }`, local whisper.cpp, SenseVoice fallback |
 | `POST /voice-mode/speak` | `{ text, sid?, speed? }` → `audio/wav`, Kokoro or `say` |
 
 All routes sit behind the harness connection gate.
