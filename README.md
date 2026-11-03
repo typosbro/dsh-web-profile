@@ -43,7 +43,7 @@ needed; set `AGENT_KIT_DIR` to point at an existing clone instead.
 | `headless` profile | one-shot scripting path with no HTTP surface | `profiles/headless/` |
 | `desktop` template | backup of the Desktop app's profile; installed by `./install-desktop.sh` | `profiles/desktop/` |
 | Plugins | `@local/voice-mode`, `@local/dsh-web-search-local`, browser stack (optional) | `plugins/` |
-| Community plugins | `dshmarket` (in-app plugin market), `dsh-leak-guard` (`leak_guard` secret scan before publishing), `@goodandready/dsh-time-machine` (checkpoints + rollback) | `profiles/web/package.json` |
+| Community plugins | `dshmarket` (in-app plugin market), `dsh-leak-guard` (`leak_guard` secret scan before publishing), `@goodandready/dsh-time-machine` (checkpoints + rollback), `@goodandready/dsh-plugin-notify` (turn/approval notifications), `dsh-context` (context dashboard + `/context`) | `profiles/web/package.json` |
 | Presets | `orchestrator` (acts first, escalates decisions) and `worker` (lean child) | `presets/` |
 | Skills + rules | DSH-only skills here, operator contract and portable skills from `agent-kit` | `skills/`, `agent-kit` |
 | Voice bridge | standalone Discord voice sidecar (hear → transcribe → answer → speak) | `services/voice-bridge/` |

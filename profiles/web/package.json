@@ -10,7 +10,9 @@
     "@addozhang/dsh-discord": "^0.6.5",
     "dshmarket": "^1.73.9",
     "dsh-leak-guard": "^0.1.1",
-    "@goodandready/dsh-time-machine": "^0.1.31"
+    "@goodandready/dsh-time-machine": "^0.1.31",
+    "@goodandready/dsh-plugin-notify": "^0.4.8",
+    "dsh-context": "^0.80.2"
   },
   "dsh": {
     "profile": {
@@ -32,7 +34,9 @@
         "@addozhang/dsh-discord",
         "dshmarket",
         "dsh-leak-guard",
-        "@goodandready/dsh-time-machine"
+        "@goodandready/dsh-time-machine",
+        "@goodandready/dsh-plugin-notify",
+        "dsh-context"
       ],
       "patchReload": "live"
     }
