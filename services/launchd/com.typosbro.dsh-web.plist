@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>DSH_RELAY_BIND</key>
+		<string>@TAILNET_IP@</string>
+		<key>HOME</key>
+		<string>@HOME@</string>
+		<key>PATH</key>
+		<string>@HOME@/.local/share/fnm/node-versions/v24.19.0/installation/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:@HOME@/.local/share/pnpm</string>
+	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>Label</key>
+	<string>com.typosbro.dsh-web</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@HOME@/.local/share/pnpm/dsh</string>
+		<string>web</string>
+		<string>--port</string>
+		<string>3080</string>
+		<string>--no-open</string>
+		<string>--trusted-host</string>
+		<string>@TAILNET_HOST@</string>
+		<string>--public-url</string>
+		<string>http://@TAILNET_HOST@:8080/</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>@HOME@/.dsh/dsh-web.err</string>
+	<key>StandardOutPath</key>
+	<string>@HOME@/.dsh/dsh-web.log</string>
+	<key>ThrottleInterval</key>
+	<integer>10</integer>
+	<key>WorkingDirectory</key>
+	<string>@HOME@</string>
+</dict>
+</plist>

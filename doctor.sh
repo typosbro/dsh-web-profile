@@ -124,5 +124,51 @@ grep -q 'opencode-go' "$DSH_HOME/profiles/headless/cordis.patch.yml" 2>/dev/null
   && warn "dead hook file present at ~/.dsh/hooks/hooks.json (bridge is not mounted)" \
   || ok "no dead hook file"
 
+# --- restored stack: profiles, voice, Discord, services -----------------------
+WEB_PKG="$DSH_HOME/profiles/web/package.json"
+if grep -q '"@local/voice-mode"' "$WEB_PKG" 2>/dev/null; then
+  ok "voice-mode plugin linked in the web profile"
+else
+  warn "voice-mode plugin missing from the web profile (run ./bootstrap.sh)"
+fi
+if grep -q '"@addozhang/dsh-discord"' "$WEB_PKG" 2>/dev/null; then
+  ok "Discord text adapter installed in the web profile"
+else
+  warn "Discord adapter missing (./bootstrap.sh; then Settings -> Discord for the token)"
+fi
+if [ -f "$DSH_HOME/profiles/web/cordis.patch.yml" ] \
+   && ! grep -q 'allowedGuildIds: \[\]' "$DSH_HOME/profiles/web/cordis.patch.yml"; then
+  ok "Discord guild allowlist configured"
+else
+  warn "Discord guild allowlist is empty (Settings -> Discord)"
+fi
+if [ -f "$DSH_HOME/profiles/superagent/package.json" ]; then
+  ok "superagent profile installed"
+  if [ -d "$DSH_HOME/profiles/superagent/plugin/lib" ] \
+     || [ -d "$DSH_HOME/profiles/superagent/node_modules/dsh-superagent/lib" ]; then
+    ok "superagent plugin present and built (lib/)"
+  else
+    warn "superagent plugin missing its built lib/"
+  fi
+  grep -q '@DSH_HOME@' "$DSH_HOME/profiles/superagent/cordis.patch.yml" 2>/dev/null \
+    && bad "unsubstituted @DSH_HOME@ token in the superagent patch" \
+    || ok "superagent paths substituted"
+else
+  warn "superagent profile not installed (bootstrap installs it)"
+fi
+if [ -d "$DSH_HOME/services/voice-bridge/src" ]; then
+  ok "voice bridge sidecar staged (WITH_SERVICES=1)"
+  [ -f "$HOME/.config/dsh-superagent/voice-bridge.json" ] \
+    && ok "voice bridge config present" \
+    || warn "voice bridge config missing (~/.config/dsh-superagent/voice-bridge.json)"
+else
+  warn "voice bridge not staged (WITH_SERVICES=1 ./bootstrap.sh)"
+fi
+if command -v curl >/dev/null 2>&1 && curl -s -m 2 http://127.0.0.1:3080/voice-mode/status >/dev/null 2>&1; then
+  ok "local voice routes answer on :3080"
+else
+  warn "local voice routes not reachable (is dsh web running?)"
+fi
+
 printf '\n%d failure(s), %d warning(s)\n\n' "$FAIL" "$WARN"
 [ "$FAIL" -eq 0 ]

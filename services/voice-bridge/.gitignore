@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+tmp/
+.env
+# never commit tokens or captured audio
+*.aiff
+*.wav.tmp
+voice-bridge.json

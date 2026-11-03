@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@addozhang/dsh-discord':
+        specifier: ^0.6.5
+        version: 0.6.5
       '@local/dsh-orchestrator-preset':
         specifier: link:../../presets/orchestrator
         version: link:../../presets/orchestrator
@@ -17,11 +20,20 @@ importers:
       '@local/dsh-worker-preset':
         specifier: link:../../presets/worker
         version: link:../../presets/worker
+      '@local/voice-mode':
+        specifier: link:../../plugins/voice-mode
+        version: link:../../plugins/voice-mode
       dsh-relay:
         specifier: github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8
         version: https://codeload.github.com/hazyumps/deepseek-harness-relay/tar.gz/36321a6ed914166186db84a1ceb514e6283e95e8
 
 packages:
+
+  '@addozhang/dsh-discord@0.6.5':
+    resolution: {integrity: sha512-9O2zTNETDFD6EOSck4UadJFUHsK66AYVtos8p6W6PBDrAk9eamJzj37fR1dNvyoMMGcNK7weiqO9fgGUCzZIAQ==}
+    engines: {node: ^22.19.0 || >=24.0.0}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.3
 
   '@deepseek-ai/cosmokit@1.8.6':
     resolution: {integrity: sha512-ZSD/fN52L498LBIOYwjIOlaLv5veY6ZEwI2yzvZUKQtctn0QAPqu8tKdJ+OF5+Tv6NBq1U+wJWH+QI6OGy5EvQ==}
@@ -270,7 +282,15 @@ packages:
     resolution: {integrity: sha512-aePbxDmcYW++PaqBsJ+HYUFwCdv4LVvdnhBy78E57PIor8/OVvhMrADFFEDh8DHDFRv/O9i3lPhsENjO7QX0+A==}
     engines: {node: '>=8'}
 
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
+
 snapshots:
+
+  '@addozhang/dsh-discord@0.6.5':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.5
+      zod: 4.6.7
 
   '@deepseek-ai/cosmokit@1.8.6': {}
 
@@ -545,3 +565,5 @@ snapshots:
       which-module: 2.0.1
       y18n: 4.0.3
       yargs-parser: 18.1.3
+
+  zod@4.6.7: {}

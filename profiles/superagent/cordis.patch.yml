@@ -1,0 +1,49 @@
+# Machine configuration for the dsh-superagent profile.
+# Created 2026-11-03 for the dsh-superagent research prototype
+# (https://github.com/deepseek-ai/dsh-superagent-prototype).
+# Keep this profile separate from the operator's working profile: the plugin
+# changes process-wide PATH and git settings and needs its own restarts.
+
+# Panel and management API port. Loopback only.
+- id: webserver
+  config:
+    host: 127.0.0.1
+    port: 3082
+
+# The plugin refuses to start without stateDir: database, lock, command shims,
+# the agent's git configuration and the Ticket directories live here.
+# Back up orchestrator.sqlite before upgrades. Cannot be changed at runtime.
+- id: dsh-superagent
+  config:
+    stateDir: '@DSH_HOME@/state/superagent'
+
+# Model routes, same as the operator's web profile: the key is
+# OPENCODE_GO_API_KEY in ~/.dsh/.env, which every profile under the same
+# DSH_HOME reads.
+- id: llm-pi-ai
+  config:
+    providers:
+      opencode-go:
+        apiKeyEnv: OPENCODE_GO_API_KEY
+- id: agent-default-model
+  config:
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+
+# Tool-web provider selection: the base bundle mounts two fetch providers, so
+# name both explicitly or every web_fetch fails.
+- id: web
+  config:
+    searchProvider: local-duckduckgo
+    fetchProvider: http
+
+# The DeepSeek account plugin polls an unauthenticated endpoint and logs 403s on
+# every retry; the API-key route is what model access actually uses.
+- id: llm-deepseek-account
+  disabled: true
+
+# Discord Source. The bundle ships this row disabled; Discord is the chat
+# surface (text threads + voice later), GitHub stays the work surface.
+# Configure tokenFile and channels on the Discord card in the panel.
+- id: dsh-superagent-discord
+  disabled: false

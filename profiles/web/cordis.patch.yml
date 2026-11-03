@@ -56,31 +56,51 @@
   config:
     fontSize: 17
 
-# OpenCode Go provider (pre-existing row, kept).
+# Model routes. OpenCode Go (pre-existing, kept as the fallback):
+#   OPENCODE_GO_API_KEY in ~/.dsh/.env.
+# Anthropic/Claude subscription (2026-10-27): no apiKeyEnv on purpose — the
+# Claude Pro/Max OAuth grant lives in ~/.dsh/.credentials.yaml as the record
+# llm-pi-ai/anthropic (kind: grant), the same record dsh's authorization seam
+# writes for a "Sign in with Claude" flow. An apiKeyEnv here would outrank that
+# grant, and an unresolvable reference would fail the route.
 - id: llm-pi-ai
   name: "@deepseek-ai/dsh-llm-pi-ai"
   config:
     providers:
       opencode-go:
         apiKeyEnv: OPENCODE_GO_API_KEY
-
+      anthropic:
+        displayName: Anthropic (Claude Pro/Max)
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
     provider: opencode-go
     model: deepseek-v4.1-flash
-    reasoningEffort: medium
+    reasoningEffort: max
 
 # Tool-web provider selection. The base bundle mounts two fetch providers
 # (`http` from web-fetch-http and `deepseek-fetch-api` from web-deepseek-api), so
 # every web_fetch call fails with "multiple usable web providers are registered".
-# Name both providers explicitly; a config override replaces the row.
+# Name both providers explicitly. This duplicates plugins/web-search/cordis.patch.yml
+# so the fix lands on the live process (bundle patches are not hot-reloaded) and on a
+# fresh bootstrap. A config override replaces the row, so both keys are required.
 - id: web
   config:
     searchProvider: local-duckduckgo
     fetchProvider: http
 
-# The DeepSeek account plugin polls /auth-api/v0/users/current with an unauthenticated
-# session and logs a 403 on every retry. Model access uses the API-key route.
+# The DeepSeek account plugin polls /auth-api/v0/users/current with a session that
+# is not authenticated and logs a 403 on every retry. The API-key route
+# (llm-deepseek) is what model access actually uses; the account surface is not.
 - id: llm-deepseek-account
   disabled: true
+
+# Discord adapter: enabled, allowlisted to the private "agents" guild, with the
+# guild owner authorized as a member. The bot token lives in the host credential
+# store (DSH_DISCORD_BOT_TOKEN), never here.
+- id: dsh-discord
+  config:
+    enabled: true
+    # Fill these in Settings → Discord on the restored machine (snowflake ids).
+    allowedGuildIds: []
+    memberUserIds: []

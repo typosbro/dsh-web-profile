@@ -6,7 +6,8 @@
     "@local/dsh-web-search-local": "link:../../plugins/web-search",
     "@local/voice-mode": "link:../../plugins/voice-mode",
     "dsh-relay": "github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8",
-    "@local/dsh-worker-preset": "link:../../presets/worker"
+    "@local/dsh-worker-preset": "link:../../presets/worker",
+    "@addozhang/dsh-discord": "^0.6.5"
   },
   "dsh": {
     "profile": {
@@ -24,7 +25,8 @@
         "@deepseek-ai/dsh-experimental-ralph-bundle",
         "@local/dsh-orchestrator-preset",
         "@local/dsh-worker-preset",
-        "dsh-relay"
+        "dsh-relay",
+        "@addozhang/dsh-discord"
       ],
       "patchReload": "live"
     }

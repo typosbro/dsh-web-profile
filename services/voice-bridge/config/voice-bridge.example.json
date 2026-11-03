@@ -1,0 +1,35 @@
+{
+  "instanceName": "whalechan",
+  "tokenFile": "~/.config/dsh-superagent/discord-token",
+  "guildId": "000000000000000000",
+  "voiceChannelId": "000000000000000000",
+  "operatorUserId": "000000000000000000",
+  "ignoreUserIds": [],
+  "ignoreBotIds": [],
+  "replyTextChannelId": null,
+  "controlPort": 3090,
+  "selfMute": false,
+  "ffmpegPath": "ffmpeg",
+  "stt": {
+    "url": "http://127.0.0.1:2022/v1/audio/transcriptions",
+    "language": "en",
+    "model": "whisper-1"
+  },
+  "tts": {
+    "engine": "kokoro",
+    "kokoroUrl": "http://127.0.0.1:8880/v1/audio/speech",
+    "kokoroVoice": "af_heart"
+  },
+  "capture": {
+    "mode": "vad",
+    "autoStart": true,
+    "vad": {
+      "thresholdDbfs": -35,
+      "minSpeechMs": 200,
+      "silenceMs": 600,
+      "preRollMs": 300,
+      "minUtteranceMs": 300,
+      "maxUtteranceMs": 15000
+    }
+  }
+}

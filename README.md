@@ -1,196 +1,144 @@
 # dsh-web-profile
 
-A reproducible profile for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`):
-web GUI, phone-sized shell, installable PWA, a pinned Playwright browser stack, and a
-stop-gate plugin that refuses to end a turn on "looks done" when the repository has a gate.
+A one-command reproducible home for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+(`dsh`): the Web GUI, **hands-free local voice**, a Discord surface (text and voice),
+the **superagent** profile, career-ops scheduling, agent presets, skills, and the
+operating rules that keep the agent shipping instead of narrating.
 
-This is the "everything is a plugin" harness configured the way an agent actually needs to run:
-a declarative patch layer, pinned versions, a doctor that proves the composition, and no
-credentials in the tree.
+The machine is the source of truth; this repo is its backup. Everything that is a
+file lives here, everything that is a secret stays out, and `./bootstrap.sh` puts a
+fresh machine back together.
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/<you>/dsh-web-profile.git
+git clone https://github.com/typosbro/dsh-web-profile.git
 cd dsh-web-profile
-./bootstrap.sh          # installs dsh 0.2.1-rc.2, the profile and plugins
+./bootstrap.sh          # dsh, all profiles, plugins, presets, skills, voice plugin
 dsh web                 # http://127.0.0.1:3080/
 ```
 
-## Two hosts, one patch layer
+One command installs everything that needs no private credentials. Three things
+stay with the owner because they are secrets or private repos:
 
-The same plugin files run under either host:
+1. **Model access** — `~/.dsh/.env` (`DEEPSEEK_API_KEY` / `OPENCODE_GO_API_KEY`),
+   or sign in from Settings → Models. See [docs/models.md](docs/models.md).
+2. **Discord bot token** — Settings → Discord in the running GUI; the Host
+   credential store keeps it, never this repo.
+3. **career-ops** — a private repo: `WITH_CAREER_OPS=1 ./bootstrap.sh`.
 
-- **Linux / CLI** — `./bootstrap.sh` installs the `web` profile, then `dsh web`.
-- **macOS / Desktop app** — `./install-desktop.sh` copies the same `mobile-shell/`,
-  `web-pwa/` and `gate/` directories into `~/.dsh/profiles/desktop` and merges the
-  same three rows into the app-managed patch layer inside a marked block
-  (`--uninstall` removes them). Quit and reopen the app to apply.
+Requirements: macOS or Linux, Node 22+, pnpm (`corepack enable`), `rsync`,
+`python3`, and a system Chrome/Chromium for the browser tools. The voice stack is
+macOS-first (macOS `say` fallback, VoiceMode model servers).
 
-The stop gate is a plain host plugin (`gate/index.mjs`) that listens to
-`agent/turn-stopping`, runs the repository's gate, and steers a message back when it
-fails. It replaces the earlier `@deepseek-ai/dsh-hooks-claude-code` row: that package
-is not shipped by the Desktop app and peer-depends on the whole 0.2.1 stack, so a
-machine without the dsh CLI could never mount it. The `hooks/` directory and the
-Claude Code bridge were removed on 2026-10-26: the bridge is not mounted in any
-profile here, so the hook file could never run, and a dead hook file is worse than
-none — someone edits it and believes it is enforcing something.
+## What `bootstrap.sh` installs
 
-Requirements: Linux or macOS, Node 22+, pnpm (`corepack enable`), `rsync`, `python3`, and a
-system Chrome/Chromium for the browser tools.
-
-Model access is deliberately not installed. Set `DEEPSEEK_API_KEY` in `~/.dsh/.env` for the
-native route, or add an OpenAI-compatible provider with `examples/providers.cordis.patch.yml`.
-See [docs/models.md](docs/models.md).
-
-`dsh --profile headless "task"` is the scripting path, and its profile carries no provider
-rows — it keeps the base `deepseek-official` route and fails `MISSING_CREDENTIAL` when that
-key is absent. Mirror the web route for one run with
-[`profiles/headless/headless-providers.cordis.patch.yml`](profiles/headless/headless-providers.cordis.patch.yml):
-
-```bash
-dsh --profile headless --patch "$PWD/profiles/headless/headless-providers.cordis.patch.yml" "task"
-```
-
-Permanent form and credential caveats: [profiles/headless/README.md](profiles/headless/README.md).
-
-Re-running: `FORCE=1 ./bootstrap.sh` replaces the profile and keeps a timestamped backup.
-Verify any install with `./doctor.sh`.
-
-## What you get
-
-| Layer | What it does | Where |
+| Piece | What it gives you | Where |
 |---|---|---|
-| Trusted-host auth skip | clean URLs on loopback and declared `trustedHosts` open without the per-process token; a valid `?token=` still mints the Desktop shell's cookie; Host/Origin fence stays | `profiles/web/remote-auth/` |
-| Phone shell | sidebar as overlay drawer, stacked settings nav, dynamic viewport, safe-area insets | `profiles/web/mobile-shell/` |
-| PWA | real manifest and icons so Chrome offers an install; no service worker | `profiles/web/web-pwa/` |
-| Browser stack | pinned `@playwright/mcp` 0.0.83, headless Chrome, CDP side-channel for the pane | `plugins/playwright-browser/`, `plugins/browser-pane/`, `plugins/browser-live/` |
-| Stop gate | repository's own `gate` script blocks the end of a turn, max two blocks | `profiles/web/gate/` |
-| Cross-session messaging | `talk_to_session` addresses any live session by id or working directory | `profiles/web/session-message/` |
-| Voice mode | talk to the agent continuously, **fully local**: local SenseVoice speech-to-text in, local Kokoro (or macOS `say`) text-to-speech out, pause sends, speaking over the reply stops it and cancels the turn | `plugins/voice-mode/` |
-| Permissions | read-only / workspace-write / danger-full-access presets | `profiles/web/cordis.patch.yml` |
-| Agent presets | `orchestrator` (acts first, escalates decisions, chooses team vs subagent vs workflow) and `worker` (lean child: no delegation, no web, no schedule, no deploy) | `presets/orchestrator/`, `presets/worker/` |
-| Operator mode | every new session, in every project, loads the act-first contract: ship a reversible change or ask for one owner decision; report FIXED versus NEEDS YOUR DECISION, never a status page | `agent-kit`: `instructions/AGENTS.md` → `$DSH_HOME/AGENTS.md`; `skills/operator/` |
+| `web` profile | the main GUI profile: voice input, hands-free voice, Discord, relay, auto-review, session search, worktree, ralph | `profiles/web/` |
+| `superagent` profile | the [dsh-superagent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) on its own port 3082 and state DB | `profiles/superagent/` |
+| `headless` profile | one-shot scripting path with no HTTP surface | `profiles/headless/` |
+| `desktop` template | backup of the Desktop app's profile; installed by `./install-desktop.sh` | `profiles/desktop/` |
+| Plugins | `@local/voice-mode`, `@local/dsh-web-search-local`, browser stack (optional) | `plugins/` |
+| Presets | `orchestrator` (acts first, escalates decisions) and `worker` (lean child) | `presets/` |
+| Skills + rules | DSH-only skills here, operator contract and portable skills from `agent-kit` | `skills/`, `agent-kit` |
+| Voice bridge | standalone Discord voice sidecar (hear → transcribe → answer → speak) | `services/voice-bridge/` |
+| Services | launchd plists for the harness, model servers, career-ops | `services/launchd/` |
 
-### Enabled on the author's Mac (2026-10-23)
+Flags: `FORCE=1` replaces an existing web profile (timestamped backup kept),
+`WITH_PLAYWRIGHT=1` fetches Chromium, `WITH_SERVICES=1` stages the voice bridge and
+launchd plists, `WITH_CAREER_OPS=1` installs the private career-ops repo,
+`WITH_DESKTOP=1` refreshes the Desktop profile files.
 
-The profile in this repo mirrors one real machine, so `bootstrap.sh` reproduces it
-exactly. The bundle list is the source of truth:
+## Hands-free voice (browser)
 
-`dsh-base`, `dsh-web-app`, and the official experimental bundles
-`dsh-experimental-voice-input-bundle`, `dsh-experimental-agent-team-profile`,
-`dsh-experimental-session-search`, `dsh-experimental-session-titles-bundle`,
-`dsh-experimental-tool-worktree`, `dsh-experimental-auto-review`,
-`dsh-experimental-ralph-bundle`, plus `@local/dsh-web-search-local` from
-`plugins/web-search`, `@local/voice-mode` from `plugins/voice-mode`,
-`@local/dsh-orchestrator-preset`, `@local/dsh-worker-preset`, and `dsh-relay`.
+`plugins/voice-mode` turns the chat composer into a full conversation: a local VAD
+cuts utterances, the assistant's streamed reply is spoken sentence by sentence,
+and talking over it stops the speech and cancels the turn. Everything audio is
+local:
 
-Declined on this machine and kept in the tree as optional: the **phone shell**
-(`mobile-shell/`), the **PWA** (`web-pwa/`) and the **browser stack**
-(`plugins/playwright-browser`, `browser-pane`, `browser-live`). Their dependencies
-still install; their rows are simply not mounted. Add the rows back to
-`cordis.patch.yml` to enable them.
+| Direction | Engine | Where |
+|---|---|---|
+| speech → text | harness SenseVoice (ONNX, int8) | host, already part of the voice-input bundle |
+| text → speech | local `kokoro-fastapi` (fp32 Kokoro on Apple MPS, voice `af_sky`) | loopback `127.0.0.1:8880` |
+| fallback TTS | macOS `say` (Hangul, or when the Kokoro service is down) | host |
 
-Permissions default to `danger-full-access` here, by owner decision: this is a
-single-user machine and the agent edits outside the workspace constantly. Clone it
-knowing `approval: never` removes the last prompt before a destructive command.
+The plugin exposes three local routes used by the browser and by any sidecar:
+`POST /voice-mode/transcribe` (16 kHz WAV → text), `POST /voice-mode/speak`
+(text → WAV), and `POST /voice-mode/turn` (text → one agent answer, for the voice
+bridge). Full details: [plugins/voice-mode/README.md](plugins/voice-mode/README.md).
 
-The experimental bundles ship inside `dsh`, not the profile, so they need no
-version pinning — reproducing them requires only the `bundles` array above.
+## Discord
 
-## Reproducing this machine
+Two independent surfaces, both local-first:
 
-`./bootstrap.sh` is the whole install: it links dsh, installs the profile, copies
-`plugins/` and `presets/` into `$DSH_HOME`, syncs the DSH-only `skills/` into `$DSH_HOME/skills`,
-runs `../agent-kit/install.sh dsh` (operator contract plus the portable skills), installs the profile's
-dependencies from the frozen lockfile, and runs the doctor.
+- **Text** — [`@addozhang/dsh-discord`](https://github.com/addozhang/dsh-discord)
+  mounts on the `web` profile. Bind a channel with `/project bind`, then mention the
+  bot with a task: a thread opens and the answer streams in, with approvals and
+  questions as buttons. It needs a bot token (Settings → Discord) and the guild
+  allowlist in the same card.
+- **Voice** — `services/voice-bridge/` joins a voice channel as a bot: local
+  whisper.cpp transcribes the operator, then it asks the running harness
+  (`POST /voice-mode/turn`) and speaks the answer with local Kokoro. One process per
+  bot identity; config in `~/.config/dsh-superagent/`. See its README.
 
-Everything needed to rebuild is in git **except** deliberate machine state:
+## Services (launchd)
 
-- `dsh-relay` pairing — the relay's password and the per-device bearer tokens live
-  in the relay's `stateDir`, never in this repo. After a rebuild, set the password
-  again at `https://127.0.0.1:3443` and re-pair the phone.
-- `~/.dsh/.credentials.yaml` and `~/.dsh/.env` — API keys, never committed.
-- Sessions, attachments, scored state — `$DSH_HOME`.
+`services/launchd/` carries the plists for the harness and its sidecars;
+`scripts/install-services.sh` installs them and **never** loads the `dsh-web` job (a
+harness restart is an owner action, never something a turn schedules — the
+2026-10-26 crash loop). Models for the voice bridge are separate servers
+(whisper.cpp on `:2022`, Kokoro on `:8880`), documented in
+`services/launchd/README.md`.
 
-`dsh-relay` itself is pinned to the head of
-[PR #12](https://github.com/sorsama/deepseek-harness-relay/pull/12)
-(`hazyumps/deepseek-harness-relay@36321a6`, version 0.3.1): the published
-`0.2.1` tarball's client half waits on the removed `settingsScope` service, so
-the web boot fails on dsh 0.2.x, and its host bundle predates the harness
-browser-session signing, so paired devices get 401. Move back to the registry
-once a fixed 0.3.x is published.
+## career-ops
 
-The browser stack (`plugins/playwright-browser`, `browser-pane`, `browser-live`) is
-kept in the tree but its dependencies are no longer declared, because this machine
-does not enable it. Add them back with:
+A private job-search system (`git@github.com:career-ops-hq/career-ops.git`) with
+scheduled scan/funding jobs, plus user data that must not be in this public repo.
+`scripts/install-career-ops.sh` clones and wires it; the data lives in
+`~/agent-memory/career-ops` and `~/.career-ops/backups`.
+
+## Re-running, verifying, upgrading
 
 ```bash
-dsh plugin --profile web add @playwright/mcp
-pnpm --dir "$HOME/.dsh/profiles/web" add @local/browser-pane @local/playwright-browser @local/browser-live
+FORCE=1 ./bootstrap.sh     # replace the web profile, keep a timestamped backup
+./doctor.sh                # read-only composition check; non-zero on hard failures
 ```
+
+`dsh` is pinned to `0.2.1-rc.2`. The experimental bundles ship inside `dsh`, so
+reproducing them needs only the `bundles` array. `dsh-relay` is pinned to the head
+of [PR #12](https://github.com/sorsama/deepseek-harness-relay/pull/12)
+(`hazyumps/deepseek-harness-relay@36321a6`, 0.3.1): the published 0.2.1 tarball's
+client half waits on the removed `settingsScope` service and fails the web boot on
+dsh 0.2.x. Move back to the registry once a fixed 0.3.x exists.
+
+## What is not in this repo
+
+- Credentials, tokens, relay pairing keys, sessions, attachments, browser profiles,
+  and the Host credential store (`~/.dsh/.credentials.yaml`).
+- Personal IDs (Discord guild/user snowflakes) — the committed patch has empty
+  allowlists; fill them in Settings after restore.
+- career-ops private source and its user data.
+- Model weights: the Kokoro ONNX model and whisper ggml files are downloaded by
+  their own services, not committed here.
 
 ## Toolbox
 
-Dependency-free scripts, plus skills that teach the agent when to run them:
-
-Portable pieces (operator contract, skills, `repo-map`, `wt`, `consult-codex`, the Claude Code
-config) moved to the private `typosbro/agent-kit` repo on 2026-10-27, cloned beside this one.
-What stays here depends on DSH:
-
-- `scripts/context-audit.mjs` — separates resident context cost (AGENTS.md plus skill
-  descriptions) from on-demand skill bodies, finds rules written three times, and catches
-  skill-name collisions.
-- `scripts/usage-meter.mjs` — per-turn and per-session token totals from the persisted
-  `session.v4.jsonl.zstd` logs (input / output / cache-read), for a daily brief.
-- `scripts/night-batch.sh` — dry-run-first skeleton for unattended headless batches: explicit
-  task list, hard caps, coarse no-external-sends guard, briefs under `docs/agent-os/runs/`.
-  Needs the headless route (below) and a valid credential.
-- `profiles/web/gate/index.mjs` — the live stop gate: runs the repository's gate, then a
-  diff-level review stage that blocks on leaked keys, conflict markers, and `debugger`
-  statements. At most two forced continuations per session.
-- `bench/run.mjs` — runs one task on two model routes and keeps both transcripts, exits, and
-  durations. Harness changes get measured, not argued.
-
-The matching skills live in `skills/` (`operator`, `briefing`, `repo-map`, `context-audit`,
-`worktree`); copy or symlink the directories into your skill root. See
-[docs/improvements.md](docs/improvements.md) for what else is worth doing and what is blocked on
-the harness version.
+- `scripts/context-audit.mjs` — resident context cost (AGENTS.md + skill
+  descriptions), duplicated rules, skill-name collisions.
+- `scripts/usage-meter.mjs` — per-turn and per-session token totals from persisted
+  session logs.
+- `scripts/night-batch.sh` — dry-run-first unattended headless batches with caps.
+- `profiles/web/gate/index.mjs` — stop gate: runs the repository's gate and a
+  diff-level review (leaked keys, conflict markers, `debugger`), max two blocks.
+- `bench/run.mjs` — one task on two model routes, both transcripts kept.
 
 ## Why a profile at all
 
 DSH composes a profile as layered patches: bundle layers first, then
-`profiles/<name>/cordis.patch.yml`, then any `--patch` overlay. Every row added here is a
-decision with a reason, and the reason is written next to the row. That is what makes the setup
-reviewable instead of a pile of settings: an entry that cannot justify itself gets deleted.
-
-The short version of why this exists: the same model produces different work under a different
-harness. A gate that runs the tests changes the output more than a temperature knob does, and a
-subagent that throws away its search noise changes the context budget more than a longer system
-prompt does. See [docs/why-these-rows.md](docs/why-these-rows.md).
-
-## What is not in this repo
-
-- Credentials, sessions, tokens, browser profiles, and the credential store.
-- Personal skills and memory files. The `briefing` skill is included as an example of a
-  structured output contract.
-- The author's tailnet, relay hostnames, SearXNG instance, and multi-account model keys. Those
-  are opt-in modules, documented in `examples/`.
-
-## Replication, honestly
-
-`bootstrap.sh` pins the harness version and the profile dependencies, installs the same patch
-layer, and `doctor.sh` fails loudly when the composition is wrong. What cannot be replicated:
-
-- model access (your key, your provider, your quota);
-- the host (Chrome binary, fonts, GPU, display);
-- anything you keep in `~/.dsh` outside this profile (credentials, sessions, personal skills).
-
-See [docs/replication.md](docs/replication.md) for the exact guarantees and the upgrade path.
-
-## License
-
-MIT. The Playwright MCP server it pins is Apache-2.0; DeepSeek Harness is MIT.
+`profiles/<name>/cordis.patch.yml`, then `--patch` overlays. Every row here is a
+decision with its reason written next to it, so the setup stays reviewable instead
+of becoming a pile of settings. See [docs/why-these-rows.md](docs/why-these-rows.md).
 
 ## Documentation
 
@@ -198,12 +146,9 @@ MIT. The Playwright MCP server it pins is Apache-2.0; DeepSeek Harness is MIT.
 - [docs/models.md](docs/models.md) — native, OpenAI-compatible, and subscription routes.
 - [docs/replication.md](docs/replication.md) — what is guaranteed, what is not, upgrade path.
 - [docs/improvements.md](docs/improvements.md) — shipped ideas, blocked plugins, next steps.
-- [docs/upgrading.md](docs/upgrading.md) — moving to 0.2.1-rc.2 and unlocking the plugin ecosystem.
-- [docs/ideas-from-other-harnesses.md](docs/ideas-from-other-harnesses.md) — the survey that
-  started this.
-- [docs/agent-os/README.md](docs/agent-os/README.md) — unattended runs: night batch, briefs,
-  per-run token spend, and the safety model.
-- [docs/harness-comparison-2026-10.md](docs/harness-comparison-2026-10.md) — DSH vs Pi vs omp,
-  how Claude Code and Codex do teams and workflows, and what this profile borrows.
-- [docs/orchestration-repos-and-context-budget-2026-10.md](docs/orchestration-repos-and-context-budget-2026-10.md)
-  — public orchestration repos worth copying, plus the instruction and skill budget evidence.
+- [docs/upgrading.md](docs/upgrading.md) — moving to 0.2.1-rc.2 and the plugin ecosystem.
+- [docs/agent-os/README.md](docs/agent-os/README.md) — unattended runs and their safety model.
+
+## License
+
+MIT. DeepSeek Harness is MIT; the Playwright MCP server is Apache-2.0.

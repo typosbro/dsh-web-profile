@@ -1,0 +1,296 @@
+/* mobile-shell — CSS override layer for the DSH Web GUI on phones.
+ *
+ * Loaded from disk on every index render, so editing this file needs only a
+ * browser reload. Everything here is `!important`-lifted on purpose: injected
+ * head rows render before the app's own stylesheet links, so equal-specificity
+ * rules would otherwise lose the cascade, and the value being beaten is an
+ * inline `gridTemplateColumns` style, which only `!important` can override.
+ */
+
+/* ---- 1. Shell geometry: dynamic viewport, no document overscroll ---------- */
+html {
+  /* The dynamic viewport, not the large one: keeps the composer clear of the
+     browser's URL bar instead of sizing past it. */
+  height: 100dvh !important;
+  /* The app shell scrolls its own panes; the document itself must not scroll,
+     which is also what stops the rubber-band overscroll gesture. */
+  overflow: hidden !important;
+  overscroll-behavior-y: none !important;
+}
+
+/* Older engines without dvh keep the old behaviour rather than a broken value. */
+@supports not (height: 100dvh) {
+  html { height: 100vh !important; }
+}
+
+/* Keyboard open (set by shell.js): fit the visual viewport exactly. */
+html[data-dsh-kb] { height: var(--dsh-app-h, 100dvh) !important; }
+
+body {
+  height: 100% !important;
+  overflow: hidden !important;
+  overscroll-behavior-y: none !important;
+  box-sizing: border-box !important;
+  background: var(--dsw-alias-bg-base);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Inset the shell out of the notch / home indicator when edge-to-edge. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ---- 2. Phones and small tablets: the sidebar becomes a Material drawer ---
+ * Selectors are structural on purpose. Class names here are CSS-module outputs
+ * (`<hash>_<localName>`), so a rebuilt app can change the hash and silently
+ * disable a class-only override. `[data-rightbar-col]` and
+ * `[data-sidebar-collapsed]` are stable React attributes, and the local name
+ * `sidebarCol` survives a rebuild. `:is()` is a forgiving selector list, so an
+ * engine without `:has()` still matches the class half. */
+@media (max-width: 979px) {
+  /* The leading track is zero in BOTH states. Collapsed, that deletes the 56px
+     icon rail so the conversation owns the full width; expanded, the sidebar is
+     re-presented as an overlay drawer rather than a grid track. The third track
+     is provably 0 across this whole range, so zeroing it is safe either way. */
+  :is(.pI_x6G_frame, div:has(> [data-rightbar-col])) {
+    grid-template-columns: 0 minmax(0, 1fr) 0 !important;
+  }
+
+  /* Collapsed means gone, not narrowed. Honouring the rail's own buttons is the
+     drawer's job now (New session, Search, Settings all live inside it).
+     `visibility`, never `display:none`: a display-none child stops
+     participating in grid auto-placement, which slides the conversation into
+     the zeroed first track and collapses it to 0px — the same trap the comment
+     on the drawer rule below describes for `position:absolute`. The element
+     must keep its cell; it only has to become invisible. `visibility:hidden`
+     also removes it from hit-testing, and it stays programmatically clickable,
+     which is how the drawer is opened and closed. */
+  :is(.pI_x6G_frame, div:has(> [data-rightbar-col]))[data-sidebar-collapsed]
+    > :is(.pI_x6G_sidebarCol, [class*='sidebarCol']) {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* Expanded: the drawer itself. */
+  :is(.pI_x6G_frame, div:has(> [data-rightbar-col])):not([data-sidebar-collapsed])
+    > :is(.pI_x6G_sidebarCol, [class*='sidebarCol']) {
+    /* Deliberately `relative`, never `absolute`: an absolutely positioned child
+       leaves grid auto-placement entirely, which slides the centre column up
+       into the zeroed first track and collapses it to 0px. Relative keeps the
+       sidebar in its own cell while z-index lifts it over the centre, and the
+       explicit width simply overflows the empty track. */
+    position: relative !important;
+    z-index: 30;
+    width: min(320px, 86vw);
+    box-shadow: var(--dsw-elevation-prominent);
+    animation: dsh-drawer-in 220ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  /* The hamburger that stands in for the rail. `fixed` keeps it independent of
+     the frame's containing block, and z-index 20 sits under the scrim (25) so
+     opening the drawer covers it. */
+  .dsh-burger {
+    position: fixed !important;
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(12px + env(safe-area-inset-right));
+    z-index: 20;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--dsw-alias-label-primary, currentColor);
+    cursor: pointer;
+  }
+  .dsh-burger:active {
+    background: var(--dsw-alias-interactive-bg-hover, rgb(127 127 127 / 18%));
+  }
+  .dsh-burger svg { display: block; width: 22px; height: 22px; }
+  .dsh-burger[hidden] { display: none !important; }
+
+  /* Reserve the hamburger's slot so the header's own action cluster (overflow
+     menu + right-sidebar toggle) slides clear of it instead of colliding. */
+  :is(.pI_x6G_centerCol, [class*='centerCol']) header[class*='header'] {
+    padding-right: 64px !important;
+  }
+
+  /* Column resize handles are a pointer affordance and land mid-screen once the
+     track is zeroed; they have no meaning on touch. */
+  :is(.pI_x6G_frame, div:has(> [data-rightbar-col])) > [class*='handle'] {
+    display: none !important;
+  }
+}
+
+@keyframes dsh-drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes dsh-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.pI_x6G_frame, div:has(> [data-rightbar-col])):not([data-sidebar-collapsed])
+    > :is(.pI_x6G_sidebarCol, [class*='sidebarCol']),
+  [data-dsh-drawer-scrim] {
+    animation: none !important;
+  }
+}
+
+/* Scrim behind the drawer; injected by shell.js, removed when it closes. */
+[data-dsh-drawer-scrim] {
+  /* `fixed` rather than `absolute` so it does not depend on whether the frame
+     happens to establish a containing block. */
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 25;
+  background: var(--dsw-alias-bg-mask-1, rgb(0 0 0 / 32%));
+  -webkit-backdrop-filter: var(--dsw-mask-blur);
+  backdrop-filter: var(--dsw-mask-blur);
+  animation: dsh-scrim-in 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ---- 3. Settings: stack the nav above the content ------------------------
+ * NOTE: `VOzbGW` is the CSS-module hash emitted by a build of
+ * `dsh-client-ui-settings-general`. Unlike the drawer rule above, this panel
+ * root has no structural hook — its local name is the generic `panel` — so a
+ * frontend rebuild can change the hash and quietly stop this block matching.
+ * Symptom: settings text wraps one word per line again on a phone. Fix: read
+ * the new prefix off any settings element in devtools and update `VOzbGW`
+ * below. `shell.css` is read per index render, so a browser reload is enough. */
+@media (max-width: 700px) {
+  .VOzbGW_panel {
+    flex-direction: column !important;
+    height: min(800px, calc(100dvh - 48px)) !important;
+    max-height: calc(100dvh - 48px) !important;
+  }
+
+  /* The 188px nav becomes a horizontally scrollable tab strip. */
+  .VOzbGW_nav {
+    width: 100% !important;
+    flex: none !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 12px 12px 0 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+  }
+  .VOzbGW_nav::-webkit-scrollbar { display: none; }
+  .VOzbGW_navTitle { display: none !important; }
+  .VOzbGW_navList {
+    flex-direction: row !important;
+    flex: 1 1 auto !important;
+    gap: 4px !important;
+  }
+  .VOzbGW_navCell {
+    flex: none !important;
+    height: 36px !important;
+    padding: 7px 12px !important;
+    white-space: nowrap;
+  }
+  .VOzbGW_navLabel { overflow: visible !important; }
+
+  .VOzbGW_content {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+  .VOzbGW_header {
+    height: auto !important;
+    padding: 8px 12px !important;
+    align-items: center !important;
+  }
+}
+
+/* ---- 4. Touch ergonomics ------------------------------------------------- */
+@media (pointer: coarse) {
+  button, [role='button'], [role='tab'], [role='menuitem'], input, select, textarea, label, summary {
+    /* Drop the 300ms double-tap-zoom delay without disabling pinch-zoom. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ---- 5. The ask-question card: give its text its width back ---------------
+ * Measured on the shipped CSS: at 390px the card renders 260px wide (230px at
+ * 360px) leaving a ~192px text column, about 23 characters per line — the
+ * one-word-per-line wrap in the report. Three shipped declarations compound:
+ *
+ *   a. `.frame` spends `calc(var(--dsh-composer-side-clearance) + 16px)` on
+ *      each side and never reduces it on a phone. With `justify-content:center`
+ *      that is 64px of a 324px seat spent on gutters.
+ *   b. `.card` caps itself with `max-width: var(--dsh-chat-content-width)`,
+ *      which resolves through `clamp(680px, ..., 920px)`. A phone can never
+ *      reach the 680px floor, so the cap is inert and the padded container
+ *      silently wins.
+ *   c. `.header` spends a fixed `gap:16px` plus a non-shrinking 52px
+ *      chevron/close cluster, leaving the title 162px.
+ *
+ * The component's own `@media (width<=720px)` block only trims 4px per option
+ * and 8px off the header, so none of the above is addressed upstream.
+ *
+ * Every rule is anchored to the question frame, because this module's local
+ * names (`frame`, `card`, `header`, `title`, `options`) are far too generic to
+ * match globally — a bare `[class*='_header']` would hit the conversation
+ * header, settings, and every other panel. The anchor uses the build hash OR a
+ * structural match specific enough that nothing else satisfies it.
+ * NOTE: `[class*='questionCard']` is NOT a valid hook — no such local name
+ * exists in the bundle.
+ *
+ * NOT VERIFIED against a live card: no question was pending while this was
+ * written, so it derives from the shipped declarations plus measured mock
+ * markup at real viewport widths. Confirm next time a question appears. */
+@media (max-width: 720px) {
+  /* (a) drop the extra 16px per side, keep the composer's own clearance */
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options'])) {
+    padding-left: var(--dsh-composer-side-clearance, 16px) !important;
+    padding-right: var(--dsh-composer-side-clearance, 16px) !important;
+  }
+
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options']))
+    [class*='_card'] {
+    /* (b) the clamp floor can never bind here, so let the card fill its seat */
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options']))
+    [class*='_header'] {
+    /* (c) tighter gap, and let the heading take the space back */
+    gap: 8px !important;
+  }
+
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options']))
+    [class*='_headingBlock'] {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options']))
+    [class*='_title'] {
+    /* Long question text is prose, not a token: break it rather than overflow. */
+    overflow-wrap: anywhere !important;
+  }
+
+  /* Reclaim the double indent inside the option list (8px list + 8px row). */
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options']))
+    [class*='_options'] {
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+  :is(.Mbwy4a_frame, [class*='_frame']:has(> [class*='_card'] [class*='_options']))
+    :is([class*='_option'], [class*='_customRow']) {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+}

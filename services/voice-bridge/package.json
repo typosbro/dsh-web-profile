@@ -1,0 +1,33 @@
+{
+  "name": "dsh-voice-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone Discord voice sidecar for the DSH agent system: join a voice channel, receive operator audio, transcribe with local whisper.cpp, speak with local Kokoro (EN) or macOS say (KO).",
+  "type": "module",
+  "main": "src/main.js",
+  "bin": {
+    "dsh-voice-bridge": "src/main.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "check": "node src/main.js --check",
+    "test": "node --test",
+    "verify:local": "node scripts/verify-local.mjs",
+    "probe": "node scripts/discord-probe.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@discordjs/opus": "0.11.0",
+    "@discordjs/voice": "0.19.2",
+    "discord.js": "14.28.0",
+    "prism-media": "1.3.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@discordjs/opus"
+    ]
+  }
+}

@@ -10,3 +10,14 @@ plugins/*/node_modules/
 bench/results/
 
 docs/agent-os/runs/
+
+# Machine-local and secret-bearing paths
+profiles/*/.plugin-manager/
+profiles/*/cordis.patch.yml.bak*
+profiles/*/pnpm-lock.yaml.bak*
+services/*/node_modules/
+services/voice-bridge/config/voice-bridge.json
+services/voice-bridge/*.log
+*.local.yml
+*.local.patch.yml
+profiles/superagent/plugin/node_modules/
