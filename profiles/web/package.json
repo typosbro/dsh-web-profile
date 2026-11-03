@@ -7,7 +7,10 @@
     "@local/voice-mode": "link:../../plugins/voice-mode",
     "dsh-relay": "github:hazyumps/deepseek-harness-relay#36321a6ed914166186db84a1ceb514e6283e95e8",
     "@local/dsh-worker-preset": "link:../../presets/worker",
-    "@addozhang/dsh-discord": "^0.6.5"
+    "@addozhang/dsh-discord": "^0.6.5",
+    "dshmarket": "^1.73.9",
+    "dsh-leak-guard": "^0.1.1",
+    "@goodandready/dsh-time-machine": "^0.1.31"
   },
   "dsh": {
     "profile": {
@@ -26,7 +29,10 @@
         "@local/dsh-orchestrator-preset",
         "@local/dsh-worker-preset",
         "dsh-relay",
-        "@addozhang/dsh-discord"
+        "@addozhang/dsh-discord",
+        "dshmarket",
+        "dsh-leak-guard",
+        "@goodandready/dsh-time-machine"
       ],
       "patchReload": "live"
     }
