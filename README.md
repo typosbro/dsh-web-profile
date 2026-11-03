@@ -28,8 +28,11 @@ stay with the owner because they are secrets or private repos:
 3. **career-ops** — a private repo: `WITH_CAREER_OPS=1 ./bootstrap.sh`.
 
 Requirements: macOS or Linux, Node 22+, pnpm (`corepack enable`), `rsync`,
-`python3`, and a system Chrome/Chromium for the browser tools. The voice stack is
-macOS-first (macOS `say` fallback, VoiceMode model servers).
+`python3`, `git`, and a system Chrome/Chromium for the browser tools. The voice
+stack is macOS-first (macOS `say` fallback, VoiceMode model servers).
+`bootstrap.sh` clones the private `typosbro/agent-kit` repo beside this checkout
+(the operator contract and portable skills) on first run, so GitHub SSH access is
+needed; set `AGENT_KIT_DIR` to point at an existing clone instead.
 
 ## What `bootstrap.sh` installs
 
@@ -114,13 +117,16 @@ dsh 0.2.x. Move back to the registry once a fixed 0.3.x exists.
 
 ## What is not in this repo
 
+The exact inventory — what is committed, what is regenerated, what stays with the
+owner — is [docs/backup-coverage.md](docs/backup-coverage.md). In short:
+
 - Credentials, tokens, relay pairing keys, sessions, attachments, browser profiles,
   and the Host credential store (`~/.dsh/.credentials.yaml`).
 - Personal IDs (Discord guild/user snowflakes) — the committed patch has empty
   allowlists; fill them in Settings after restore.
 - career-ops private source and its user data.
-- Model weights: the Kokoro ONNX model and whisper ggml files are downloaded by
-  their own services, not committed here.
+- Model weights: SenseVoice/VAD (auto-downloaded by the harness), Kokoro ONNX and
+  whisper ggml (installed by their own services).
 
 ## Toolbox
 
@@ -148,6 +154,7 @@ of becoming a pile of settings. See [docs/why-these-rows.md](docs/why-these-rows
 - [docs/improvements.md](docs/improvements.md) — shipped ideas, blocked plugins, next steps.
 - [docs/upgrading.md](docs/upgrading.md) — moving to 0.2.1-rc.2 and the plugin ecosystem.
 - [docs/agent-os/README.md](docs/agent-os/README.md) — unattended runs and their safety model.
+- [docs/backup-coverage.md](docs/backup-coverage.md) — does the repo contain everything? exact coverage table.
 
 ## License
 

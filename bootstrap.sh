@@ -35,6 +35,7 @@ command -v node >/dev/null || die "node is not installed (need >= 22)"
 command -v pnpm >/dev/null || die "pnpm is not installed (corepack enable)"
 command -v rsync >/dev/null || die "rsync is not installed"
 command -v python3 >/dev/null || die "python3 is not installed"
+command -v git >/dev/null || die "git is not installed"
 node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' \
   || die "node $(node -v) is too old; DSH needs >= 22"
 NODE_BIN="$(command -v node)"
@@ -87,8 +88,14 @@ say "skills"
 
 say "agent-kit (instructions + portable skills)"
 KIT_DIR="${AGENT_KIT_DIR:-$(dirname "$REPO_DIR")/agent-kit}"
-[ -x "$KIT_DIR/install.sh" ] \
-  || { printf 'agent-kit not found at %s; clone git@github.com:typosbro/agent-kit.git there or set AGENT_KIT_DIR\n' "$KIT_DIR" >&2; exit 1; }
+if [ ! -x "$KIT_DIR/install.sh" ]; then
+  note "agent-kit missing; cloning $KIT_DIR"
+  if ! git clone --depth 1 git@github.com:typosbro/agent-kit.git "$KIT_DIR" 2>/dev/null; then
+    printf 'error: could not clone agent-kit (private repo, needs GitHub SSH access)\n' >&2
+    printf '       clone git@github.com:typosbro/agent-kit.git to %s or set AGENT_KIT_DIR\n' "$KIT_DIR" >&2
+    exit 1
+  fi
+fi
 "$KIT_DIR/install.sh" dsh
 
 say "service assets"
