@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Kitsune Live Browser",
+    "description": "Drives the owner's open Firefox/Zen window (logged-in profile) through the pinned Kitsune MCP server: tabs, navigate, click, type, read the page. Read-only first; one step at a time."
+  }
+}

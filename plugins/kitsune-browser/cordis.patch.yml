@@ -1,0 +1,20 @@
+# Live browser for DSH: the owner's everyday Firefox/Zen window through the pinned
+# Kitsune MCP server (kitsune-browser-mcp 0.7.3, launched by uvx). Needs uv on PATH
+# and the Kitsune extension installed in the browser. No Chromium, no Playwright.
+#
+# This is the owner's logged-in profile. The live-browser rules in agent-kit's
+# instructions/AGENTS.md apply: one step then re-read, background tabs, read-only first.
+- insert:
+    - id: kitsune-browser
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: kitsune
+        transport: stdio
+        command: uvx
+        args:
+          - --from
+          - kitsune-browser-mcp==0.7.3
+          - kitsune
+        env: {}
+        toolCallTimeoutMs: 180000
+        failOnStartupError: false

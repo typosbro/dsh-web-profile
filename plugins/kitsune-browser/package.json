@@ -1,0 +1,17 @@
+{
+  "name": "@local/kitsune-browser",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live Firefox/Zen browser control for DSH agents through the pinned Kitsune MCP server.",
+  "type": "module",
+  "exports": {
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": ["cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

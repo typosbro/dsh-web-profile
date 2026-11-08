@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Browser window with a play control">
+  <rect x="5" y="9" width="54" height="46" rx="7" fill="none" stroke="#2f6fb0" stroke-width="4"/>
+  <path d="M5 22h54" stroke="#2f6fb0" stroke-width="4"/>
+  <circle cx="13.5" cy="15.5" r="2.5" fill="#d95f43"/>
+  <circle cx="22" cy="15.5" r="2.5" fill="#e0a83c"/>
+  <circle cx="30.5" cy="15.5" r="2.5" fill="#4f9d63"/>
+  <path d="M27 31.5v17l15-8.5z" fill="#2f6fb0"/>
+</svg>
