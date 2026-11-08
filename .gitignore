@@ -21,3 +21,6 @@ services/voice-bridge/*.log
 *.local.yml
 *.local.patch.yml
 profiles/superagent/plugin/node_modules/
+
+# Python bytecode from scripts/*.py
+__pycache__/

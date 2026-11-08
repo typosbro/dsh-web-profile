@@ -42,7 +42,7 @@ needed; set `AGENT_KIT_DIR` to point at an existing clone instead.
 | `superagent` profile | the [dsh-superagent prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) on its own port 3082 and state DB | `profiles/superagent/` |
 | `headless` profile | one-shot scripting path with no HTTP surface | `profiles/headless/` |
 | `desktop` template | backup of the Desktop app's profile; installed by `./install-desktop.sh` | `profiles/desktop/` |
-| Plugins | `@local/voice-mode`, `@local/dsh-web-search-local`, browser stack (optional), `kitsune-browser` live Firefox/Zen (optional; needs uv + the Kitsune extension) | `plugins/` |
+| Plugins | `@local/voice-mode`, `@local/dsh-web-search-local`, browser stack (optional), `kitsune-browser` live Firefox/Zen (optional; needs uv + the Kitsune extension, see [its README](plugins/kitsune-browser/README.md)) | `plugins/` |
 | Community plugins | `dshmarket` (in-app plugin market), `dsh-leak-guard` (`leak_guard` secret scan before publishing), `@goodandready/dsh-time-machine` (checkpoints + rollback), `@goodandready/dsh-plugin-notify` (turn/approval notifications), `dsh-context` (context dashboard + `/context`), `dsh-keep-awake` (wake lock during long runs) | `profiles/web/package.json` |
 | Presets | `orchestrator` (acts first, escalates decisions) and `worker` (lean child) | `presets/` |
 | Skills + rules | DSH-only skills here, operator contract and portable skills from `agent-kit` | `skills/`, `agent-kit` |
@@ -71,6 +71,25 @@ The plugin exposes three local routes used by the browser and by any sidecar:
 `POST /voice-mode/transcribe` (16 kHz WAV → text), `POST /voice-mode/speak`
 (text → WAV), and `POST /voice-mode/turn` (text → one agent answer, for the voice
 bridge). Full details: [plugins/voice-mode/README.md](plugins/voice-mode/README.md).
+
+## Live browser (Kitsune)
+
+`plugins/kitsune-browser` mounts the [Kitsune](https://github.com/junyeong-nero/kitsune)
+MCP server as `mcp__kitsune__*`, so an agent can read and drive **the owner's own
+Firefox/Zen window** — logged-in profile, real accounts, the tabs being read right
+now. That is the opposite of `@local/playwright-browser`, which drives a sandbox
+Chromium; never present the sandbox's tabs as the owner's browser.
+
+It is opt-in and off by default because handing over a logged-in profile is a
+decision, not a default. Two package.json edits (dependency + `dsh.profile.bundles`)
+and `pnpm install`, then a harness restart — never from inside a turn. Exact steps,
+mode caps and tab-ownership rules: [plugins/kitsune-browser/README.md](plugins/kitsune-browser/README.md).
+
+The patch pins `command` to an absolute `uvx`: the web host starts under launchd
+without `~/.local/bin` on PATH, where a bare `uvx` dies with ENOENT and the server
+silently never connects. `scripts/kitsune-call.py` is the same server over stdio for
+one call per invocation — works with no harness reload, no MCP client, and no
+restart.
 
 ## Discord
 
@@ -133,6 +152,8 @@ owner — is [docs/backup-coverage.md](docs/backup-coverage.md). In short:
 
 - `scripts/context-audit.mjs` — resident context cost (AGENTS.md + skill
   descriptions), duplicated rules, skill-name collisions.
+- `scripts/kitsune-call.py` — one MCP call against the live Kitsune browser
+  (`tabs`, `call <tool> <json>`, `--mode read|draft|act`); resolves `uvx` itself.
 - `scripts/usage-meter.mjs` — per-turn and per-session token totals from persisted
   session logs.
 - `scripts/night-batch.sh` — dry-run-first unattended headless batches with caps.
