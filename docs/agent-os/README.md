@@ -53,7 +53,7 @@ delivered back into the session that created it). A daily job is therefore:
 ```text
 schedule_create
   title: Night batch
-  prompt: Run `./scripts/night-batch.sh --tasks docs/agent-os/night-batch.tasks.example.md --run --max-tasks 4 --task-timeout 900 --total-timeout 3600` from ~/src/dsh-web-profile, then append the run's SUMMARY.md spend line from `./scripts/usage-meter.mjs --json` to docs/agent-os/runs/<date>/brief.md. Do not push or deploy. Report failures only.
+  prompt: Run `./scripts/night-batch.sh --tasks docs/agent-os/night-batch.tasks.example.md --run --max-tasks 4 --task-timeout 900 --total-timeout 3600` from ~/Documents/private/dsh-web-profile, then append the run's SUMMARY.md spend line from `./scripts/usage-meter.mjs --json` to docs/agent-os/runs/<date>/brief.md. Do not push or deploy. Report failures only.
   daily: 04:30:00 Asia/Seoul
 ```
 

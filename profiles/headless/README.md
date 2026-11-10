@@ -18,7 +18,7 @@ rows, ready to overlay.
 ## Try it without touching the live profile
 
 ```bash
-REPO="$HOME/src/dsh-web-profile"
+REPO="$HOME/Documents/private/dsh-web-profile"
 dsh --profile headless \
   --patch "$REPO/profiles/headless/headless-providers.cordis.patch.yml" \
   "Reply with exactly HEADLESS-OK and nothing else."
@@ -84,7 +84,7 @@ That file is currently the empty YAML sequence `[]` (or comments); appending row
 
 ```bash
 head -20 "$HOME/.dsh/profiles/headless/cordis.patch.yml"   # confirm it is []/comments only
-cp "$HOME/src/dsh-web-profile/profiles/headless/headless-providers.cordis.patch.yml" \
+cp "$HOME/Documents/private/dsh-web-profile/profiles/headless/headless-providers.cordis.patch.yml" \
    "$HOME/.dsh/profiles/headless/cordis.patch.yml"
 ```
 

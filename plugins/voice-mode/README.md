@@ -61,7 +61,7 @@ synchronous.
 ## Install
 
 ```bash
-cd ~/src/dsh-web-profile
+cd ~/Documents/private/dsh-web-profile
 # the plugin manager links this directory into the active profile and selects it
 # as a bundle; the host row serves the routes, the client half is the mic control
 ```
